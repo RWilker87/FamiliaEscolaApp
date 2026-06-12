@@ -1,54 +1,34 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../widgets/main_scaffold.dart';
+import '../shared/providers/user_provider.dart';
+import '../shared/widgets/staggered_fade_slide.dart';
+import '../data/models/user_model.dart';
 import 'aluno_detalhes_page.dart';
 
-class AlunosPage extends StatelessWidget {
+class AlunosPage extends ConsumerWidget {
   const AlunosPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final userModelAsync = ref.watch(userModelProvider);
 
-    if (uid == null) {
-      return const Scaffold(
-        body: Center(child: Text("Usuário não autenticado")),
-      );
-    }
-
-    return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
-      builder: (context, userSnapshot) {
-        if (userSnapshot.connectionState == ConnectionState.waiting) {
+    return userModelAsync.when(
+      data: (user) {
+        if (user == null) {
           return const Scaffold(
-            body: Center(
-              child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00A74F)),
-              ),
-            ),
+            body: Center(child: Text("Usuário não autenticado")),
           );
         }
 
-        if (!userSnapshot.hasData || !userSnapshot.data!.exists) {
-          return const Scaffold(
-            body: Center(
-              child: Text("Usuário não encontrado"),
-            ),
-          );
-        }
+        final role = user.role == UserRole.gestor ? 'gestao' : 'responsavel';
+        final escolaIdUser = user.escolaId;
+        final userName = user.nome;
 
-        final userData = userSnapshot.data!.data() as Map<String, dynamic>;
-        final role = userData['role'] ?? 'responsavel';
-        final escolaIdUser = userData['escolaId'];
-        final userName = userData['nome'] ?? 'Usuário';
-
-        if (escolaIdUser == null || escolaIdUser.toString().isEmpty) {
+        if (escolaIdUser == null || escolaIdUser.isEmpty) {
           return const Scaffold(
-            body: Center(
-              child: Text("Usuário não vinculado a uma escola"),
-            ),
+            body: Center(child: Text("Usuário não vinculado a uma escola")),
           );
         }
 
@@ -60,12 +40,10 @@ class AlunosPage extends StatelessWidget {
               .where('escolaId', isEqualTo: escolaIdUser)
               .orderBy('nome');
         } else {
-          final cpfUsuario = userData['cpf']?.toString();
-          if (cpfUsuario == null || cpfUsuario.isEmpty) {
+          final cpfUsuario = user.cpf;
+          if (cpfUsuario.isEmpty) {
             return const Scaffold(
-              body: Center(
-                child: Text("CPF do usuário não cadastrado"),
-              ),
+              body: Center(child: Text("CPF do usuário não cadastrado")),
             );
           }
 
@@ -76,169 +54,160 @@ class AlunosPage extends StatelessWidget {
               .orderBy('nome');
         }
 
-        return MainScaffold(
-          currentIndex: 0,
-          body: Scaffold(
-            appBar: AppBar(
-              title: const Text(
-                'Alunos',
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 20,
+        return Scaffold(
+          backgroundColor: const Color(0xFFF8FAFC),
+          appBar: AppBar(
+            title: const Text(
+              'Alunos',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
+            ),
+            backgroundColor: Colors.white,
+            foregroundColor: const Color(0xFF2D3748),
+            elevation: 0,
+            centerTitle: false,
+          ),
+          body: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header informativo
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
                   color: Colors.white,
+                  border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.people_alt_outlined,
+                        size: 24,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            role == 'gestao' ? 'Todos os Alunos' : 'Meus Alunos',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF2D3748),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            role == 'gestao'
+                                ? 'Escola ID: $escolaIdUser'
+                                : 'Alunos vinculados a $userName',
+                            style: const TextStyle(
+                              color: Color(0xFF718096),
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              backgroundColor: const Color(0xFF00A74F),
-              foregroundColor: Colors.white,
-              elevation: 0,
-            ),
-            body: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Header informativo
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    border: Border(
-                      bottom: BorderSide(color: Colors.grey.shade200),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF00A74F).withOpacity(0.1),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.people_alt_outlined,
-                          size: 24,
-                          color: Color(0xFF00A74F),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
+
+              // Lista de alunos
+              Expanded(
+                child: StreamBuilder<QuerySnapshot>(
+                  stream: alunosQuery.snapshots(),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+
+                    if (snapshot.hasError) {
+                      return Center(child: Text("Erro ao carregar alunos: ${snapshot.error}"));
+                    }
+
+                    if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                      return Center(
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Text(
-                              role == 'gestao' ? 'Todos os Alunos' : 'Meus Alunos',
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFF2D3748),
-                              ),
+                            Icon(
+                              Icons.school_outlined,
+                              size: 64,
+                              color: Colors.grey[300],
                             ),
-                            const SizedBox(height: 4),
+                            const SizedBox(height: 16),
                             Text(
                               role == 'gestao'
-                                  ? 'Escola ID: $escolaIdUser'
-                                  : 'Alunos vinculados a $userName',
+                                  ? 'Nenhum aluno cadastrado'
+                                  : 'Nenhum aluno vinculado',
                               style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
                                 color: Color(0xFF718096),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              role == 'gestao'
+                                  ? 'ID da Escola: $escolaIdUser'
+                                  : 'Verifique o CPF cadastrado ou contate a administração',
+                              style: const TextStyle(
+                                color: Color(0xFFA0AEC0),
                                 fontSize: 12,
                               ),
+                              textAlign: TextAlign.center,
                             ),
                           ],
                         ),
-                      ),
-                    ],
-                  ),
-                ),
+                      );
+                    }
 
-                // Lista de alunos
-                Expanded(
-                  child: StreamBuilder<QuerySnapshot>(
-                    stream: alunosQuery.snapshots(),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Center(
-                          child: CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00A74F)),
-                          ),
-                        );
-                      }
+                    final alunos = snapshot.data!.docs;
 
-                      if (snapshot.hasError) {
-                        return const Center(
-                          child: Text(
-                            "Erro ao carregar alunos",
-                            style: TextStyle(color: Colors.red),
-                          ),
-                        );
-                      }
-
-                      if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                        return Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
+                    return Column(
+                      children: [
+                        // Contador de alunos
+                        Container(
+                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                          color: Colors.grey.shade50,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Icon(
-                                Icons.school_outlined,
-                                size: 64,
-                                color: Colors.grey[300],
-                              ),
-                              const SizedBox(height: 16),
                               Text(
-                                role == 'gestao'
-                                    ? 'Nenhum aluno cadastrado'
-                                    : 'Nenhum aluno vinculado',
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w500,
-                                  color: Color(0xFF718096),
+                                'Total: ${alunos.length} aluno(s)',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  color: Theme.of(context).colorScheme.primary,
                                 ),
                               ),
-                              const SizedBox(height: 8),
                               Text(
-                                role == 'gestao'
-                                    ? 'ID da Escola: $escolaIdUser'
-                                    : 'Verifique o CPF cadastrado',
+                                'Escola ID: $escolaIdUser',
                                 style: const TextStyle(
-                                  color: Color(0xFFA0AEC0),
                                   fontSize: 12,
+                                  color: Color(0xFF718096),
                                 ),
                               ),
                             ],
                           ),
-                        );
-                      }
+                        ),
 
-                      final alunos = snapshot.data!.docs;
-
-                      return Column(
-                        children: [
-                          // Contador de alunos
-                          Container(
-                            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                            color: Colors.grey.shade50,
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  'Total: ${alunos.length} aluno(s)',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w500,
-                                    color: Color(0xFF00A74F),
-                                  ),
-                                ),
-                                Text(
-                                  'Escola ID: $escolaIdUser',
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: Color(0xFF718096),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          // Lista
-                          Expanded(
+                        // Lista
+                        Expanded(
+                          child: RefreshIndicator(
+                            onRefresh: () async {
+                              await Future.delayed(const Duration(milliseconds: 800));
+                            },
                             child: ListView.separated(
+                              physics: const AlwaysScrollableScrollPhysics(),
                               padding: const EdgeInsets.all(16),
                               separatorBuilder: (_, __) => const SizedBox(height: 12),
                               itemCount: alunos.length,
@@ -250,89 +219,100 @@ class AlunosPage extends StatelessWidget {
                                 final responsavelNome = aluno['responsibleName'] ?? 'Não informado';
                                 final escolaIdAluno = aluno['escolaId'] ?? '';
 
-                                return Container(
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(16),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.grey.withOpacity(0.1),
-                                        blurRadius: 6,
-                                        offset: const Offset(0, 3),
-                                      ),
-                                    ],
-                                  ),
-                                  child: ListTile(
-                                    contentPadding: const EdgeInsets.all(16),
-                                    leading: Container(
-                                      width: 50,
-                                      height: 50,
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF00A74F).withOpacity(0.1),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: Center(
-                                        child: Text(
-                                          alunoNome.isNotEmpty ? alunoNome[0].toUpperCase() : "?",
-                                          style: const TextStyle(
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.bold,
-                                            color: Color(0xFF00A74F),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    title: Text(
-                                      alunoNome,
-                                      style: const TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w600,
-                                        color: Color(0xFF2D3748),
-                                      ),
-                                    ),
-                                    subtitle: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          "Responsável: $responsavelNome",
-                                          style: const TextStyle(
-                                            color: Color(0xFF718096),
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                        Text(
-                                          "Escola ID: $escolaIdAluno",
-                                          style: const TextStyle(
-                                            color: Color(0xFFA0AEC0),
-                                            fontSize: 10,
-                                          ),
+                                return StaggeredFadeSlide(
+                                  index: index,
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.grey.withValues(alpha: 0.03),
+                                          blurRadius: 6,
+                                          offset: const Offset(0, 3),
                                         ),
                                       ],
                                     ),
-                                    trailing: Container(
-                                      width: 40,
-                                      height: 40,
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF00A74F).withOpacity(0.1),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: IconButton(
-                                        icon: const Icon(
-                                          Icons.arrow_forward,
-                                          size: 18,
-                                          color: Color(0xFF00A74F),
-                                        ),
-                                        onPressed: () {
-                                          Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder: (_) => AlunoDetalhesPage(
-                                                alunoId: alunoDoc.id,
+                                    child: ListTile(
+                                      contentPadding: const EdgeInsets.all(16),
+                                      leading: Hero(
+                                        tag: 'student_avatar_${alunoDoc.id}',
+                                        child: Material(
+                                          type: MaterialType.transparency,
+                                          child: Container(
+                                            width: 50,
+                                            height: 50,
+                                            decoration: BoxDecoration(
+                                              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: Center(
+                                              child: Text(
+                                                alunoNome.isNotEmpty ? alunoNome[0].toUpperCase() : "?",
+                                                style: TextStyle(
+                                                  fontSize: 18,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Theme.of(context).colorScheme.primary,
+                                                ),
                                               ),
                                             ),
-                                          );
-                                        },
+                                          ),
+                                        ),
+                                      ),
+                                      title: Text(
+                                        alunoNome,
+                                        style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFF2D3748),
+                                        ),
+                                      ),
+                                      subtitle: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            "Responsável: $responsavelNome",
+                                            style: const TextStyle(
+                                              color: Color(0xFF718096),
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            "Escola ID: $escolaIdAluno",
+                                            style: const TextStyle(
+                                              color: Color(0xFFA0AEC0),
+                                              fontSize: 10,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      trailing: Container(
+                                        width: 40,
+                                        height: 40,
+                                        decoration: BoxDecoration(
+                                          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: IconButton(
+                                          icon: Icon(
+                                            Icons.arrow_forward,
+                                            size: 18,
+                                            color: Theme.of(context).colorScheme.primary,
+                                          ),
+                                          onPressed: () {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (_) => AlunoDetalhesPage(
+                                                  alunoId: alunoDoc.id,
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -340,16 +320,22 @@ class AlunosPage extends StatelessWidget {
                               },
                             ),
                           ),
-                        ],
-                      );
-                    },
-                  ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         );
       },
+      loading: () => const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      ),
+      error: (err, stack) => Scaffold(
+        body: Center(child: Text("Erro ao carregar perfil: $err")),
+      ),
     );
   }
 }

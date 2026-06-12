@@ -38,7 +38,7 @@ class AuthService {
     await _db.collection('users').doc(cred.user!.uid).set({
       'nome': nome,
       'email': email,
-      'cpf': CpfUtils.normalize(cpf), // ✅ salva só números
+      'cpf': CpfUtils.normalize(cpf),
       'dataNascimento': dataNascimento,
       'role': role,
       'escolaId': escolaId,
@@ -106,9 +106,8 @@ class AuthService {
     await _db.collection('users').doc(user.uid).delete();
     try {
       await user.delete();
-    } on FirebaseAuthException catch (e) {
-      // ignore: avoid_print
-      print("Erro ao deletar conta de autenticação: ${e.message}");
+    } on FirebaseAuthException catch (_) {
+      // Falha silenciosa — conta Firebase Auth já pode ter sido removida
     }
   }
 

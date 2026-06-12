@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../auth_gate.dart';
+import '../core/constants/app_colors.dart';
 
 class SplashPage extends StatefulWidget {
   const SplashPage({super.key});
@@ -26,7 +27,7 @@ class _SplashPageState extends State<SplashPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF00A74F), // verde principal
+      backgroundColor: AppColors.primary600, // verde principal
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,

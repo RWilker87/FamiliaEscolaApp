@@ -1,8 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../core/constants/app_colors.dart';
 import 'package:intl/intl.dart';
 import 'forumThreadPage.dart';
+import '../shared/widgets/staggered_fade_slide.dart';
+import '../shared/widgets/animated_fab.dart';
 
 class ForumPage extends StatelessWidget {
   final String escolaId;
@@ -31,7 +34,7 @@ class ForumPage extends StatelessWidget {
             color: Colors.white,
           ),
         ),
-        backgroundColor: const Color(0xFF00A74F),
+        backgroundColor: AppColors.primary600,
         foregroundColor: Colors.white,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
@@ -53,13 +56,13 @@ class ForumPage extends StatelessWidget {
                   width: 48,
                   height: 48,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF00A74F).withOpacity(0.1),
+                    color: AppColors.primary600.withValues(alpha: 0.1),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(
                     Icons.forum_outlined,
                     size: 24,
-                    color: Color(0xFF00A74F),
+                    color: AppColors.primary600,
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -98,7 +101,7 @@ class ForumPage extends StatelessWidget {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
                     child: CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00A74F)),
+                      valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary600),
                     ),
                   );
                 }
@@ -135,151 +138,162 @@ class ForumPage extends StatelessWidget {
                 }
 
                 final topicos = snapshot.data!.docs;
-                return ListView.separated(
-                  padding: const EdgeInsets.all(16),
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
-                  itemCount: topicos.length,
-                  itemBuilder: (context, index) {
-                    final data = topicos[index].data() as Map<String, dynamic>;
-                    final criadoEm = (data['criadoEm'] as Timestamp?)?.toDate();
-                    final formattedDate = criadoEm != null
-                        ? DateFormat('dd/MM/yyyy \'às\' HH:mm', 'pt_BR').format(criadoEm)
-                        : '';
-
-                    return Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.grey.withOpacity(0.1),
-                            blurRadius: 6,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
-                      ),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.all(16),
-                        leading: Container(
-                          width: 50,
-                          height: 50,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF00A74F).withOpacity(0.1),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.chat_bubble_outline,
-                            size: 24,
-                            color: Color(0xFF00A74F),
-                          ),
-                        ),
-                        title: Text(
-                          data['titulo'] ?? 'Sem título',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF2D3748),
-                          ),
-                        ),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const SizedBox(height: 4),
-                            Text(
-                              data['conteudo'] ?? '',
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Color(0xFF718096),
-                                fontSize: 14,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            if (formattedDate.isNotEmpty)
-                              Text(
-                                formattedDate,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Color(0xFFA0AEC0),
-                                ),
-                              ),
-                          ],
-                        ),
-                        trailing: StreamBuilder<DocumentSnapshot>(
-                          stream: FirebaseFirestore.instance
-                              .collection("escolas")
-                              .doc(escolaId)
-                              .collection("forum")
-                              .doc(topicos[index].id)
-                              .snapshots(),
-                          builder: (context, snap) {
-                            if (!snap.hasData) return const SizedBox();
-                            final docData = snap.data!.data() as Map<String, dynamic>? ?? {};
-                            final likes = List<String>.from(docData['likes'] ?? []);
-                            final uid = FirebaseAuth.instance.currentUser?.uid;
-                            final isLiked = uid != null && likes.contains(uid);
-
-                            return Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: Icon(
-                                    isLiked ? Icons.thumb_up : Icons.thumb_up_alt_outlined,
-                                    color: isLiked ? Colors.blue : Colors.grey,
-                                  ),
-                                  onPressed: () async {
-                                    if (uid == null) return;
-                                    final ref = FirebaseFirestore.instance
-                                        .collection("escolas")
-                                        .doc(escolaId)
-                                        .collection("forum")
-                                        .doc(topicos[index].id);
-
-                                    if (isLiked) {
-                                      await ref.update({
-                                        "likes": FieldValue.arrayRemove([uid])
-                                      });
-                                    } else {
-                                      await ref.update({
-                                        "likes": FieldValue.arrayUnion([uid])
-                                      });
-                                    }
-                                  },
-                                ),
-                                Text("${likes.length}"),
-                                const SizedBox(width: 8),
-                                const Icon(Icons.arrow_forward, size: 18, color: Color(0xFF00A74F)),
-                              ],
-                            );
-                          },
-                        ),
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => ForumThreadPage(
-                                escolaId: escolaId,
-                                topicoId: topicos[index].id,
-                                topicoData: data,
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    );
+                return RefreshIndicator(
+                  onRefresh: () async {
+                    await Future.delayed(const Duration(milliseconds: 800));
                   },
+                  child: ListView.separated(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(16),
+                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    itemCount: topicos.length,
+                    itemBuilder: (context, index) {
+                      final data = topicos[index].data() as Map<String, dynamic>;
+                      final criadoEm = (data['criadoEm'] as Timestamp?)?.toDate();
+                      final formattedDate = criadoEm != null
+                          ? DateFormat('dd/MM/yyyy \'às\' HH:mm', 'pt_BR').format(criadoEm)
+                          : '';
+
+                      return StaggeredFadeSlide(
+                        index: index,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.grey.withValues(alpha: 0.1),
+                                blurRadius: 6,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
+                          ),
+                          child: ListTile(
+                            contentPadding: const EdgeInsets.all(16),
+                            leading: Container(
+                              width: 50,
+                              height: 50,
+                              decoration: BoxDecoration(
+                                color: AppColors.primary600.withValues(alpha: 0.1),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.chat_bubble_outline,
+                                size: 24,
+                                color: AppColors.primary600,
+                              ),
+                            ),
+                            title: Text(
+                              data['titulo'] ?? 'Sem título',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF2D3748),
+                              ),
+                            ),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const SizedBox(height: 4),
+                                Text(
+                                  data['conteudo'] ?? '',
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Color(0xFF718096),
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                if (formattedDate.isNotEmpty)
+                                  Text(
+                                    formattedDate,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Color(0xFFA0AEC0),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            trailing: StreamBuilder<DocumentSnapshot>(
+                              stream: FirebaseFirestore.instance
+                                  .collection("escolas")
+                                  .doc(escolaId)
+                                  .collection("forum")
+                                  .doc(topicos[index].id)
+                                  .snapshots(),
+                              builder: (context, snap) {
+                                if (!snap.hasData) return const SizedBox();
+                                final docData = snap.data!.data() as Map<String, dynamic>? ?? {};
+                                final likes = List<String>.from(docData['likes'] ?? []);
+                                final uid = FirebaseAuth.instance.currentUser?.uid;
+                                final isLiked = uid != null && likes.contains(uid);
+
+                                return Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: Icon(
+                                        isLiked ? Icons.thumb_up : Icons.thumb_up_alt_outlined,
+                                        color: isLiked ? Colors.blue : Colors.grey,
+                                      ),
+                                      onPressed: () async {
+                                        if (uid == null) return;
+                                        final ref = FirebaseFirestore.instance
+                                            .collection("escolas")
+                                            .doc(escolaId)
+                                            .collection("forum")
+                                            .doc(topicos[index].id);
+
+                                        if (isLiked) {
+                                          await ref.update({
+                                            "likes": FieldValue.arrayRemove([uid])
+                                          });
+                                        } else {
+                                          await ref.update({
+                                            "likes": FieldValue.arrayUnion([uid])
+                                          });
+                                        }
+                                      },
+                                    ),
+                                    Text("${likes.length}"),
+                                    const SizedBox(width: 8),
+                                    const Icon(Icons.arrow_forward, size: 18, color: AppColors.primary600),
+                                  ],
+                                );
+                              },
+                            ),
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => ForumThreadPage(
+                                    escolaId: escolaId,
+                                    topicoId: topicos[index].id,
+                                    topicoData: data,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                 );
               },
             ),
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _criarTopico(context, escolaId),
-        backgroundColor: const Color(0xFF00A74F),
-        foregroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: const Icon(Icons.add, size: 28),
+      floatingActionButton: AnimatedFAB(
+        child: FloatingActionButton(
+          onPressed: () => _criarTopico(context, escolaId),
+          backgroundColor: AppColors.primary600,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: const Icon(Icons.add, size: 28),
+        ),
       ),
     );
   }

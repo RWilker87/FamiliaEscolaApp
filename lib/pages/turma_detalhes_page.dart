@@ -1,9 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import '../core/constants/app_colors.dart';
 import 'package:intl/intl.dart';
 
 import 'TurmaRelatorioPage.dart';
 import 'visualizar_relatorio_page.dart';
+import '../shared/widgets/animated_fab.dart';
+import '../shared/widgets/staggered_fade_slide.dart';
 
 class TurmaDetalhesPage extends StatefulWidget {
   final String escolaId;
@@ -88,14 +91,19 @@ class _TurmaDetalhesPageState extends State<TurmaDetalhesPage> {
             color: Colors.white,
           ),
         ),
-        backgroundColor: const Color(0xFF00A74F),
+        backgroundColor: AppColors.primary600,
         foregroundColor: Colors.white,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
+      body: RefreshIndicator(
+        onRefresh: () async {
+          await Future.delayed(const Duration(milliseconds: 800));
+        },
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(16),
+          children: [
           StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance
                 .collection('students')
@@ -107,7 +115,7 @@ class _TurmaDetalhesPageState extends State<TurmaDetalhesPage> {
                   padding: EdgeInsets.all(32.0),
                   child: Center(
                     child: CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00A74F)),
+                      valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary600),
                     ),
                   ),
                 );
@@ -184,10 +192,13 @@ class _TurmaDetalhesPageState extends State<TurmaDetalhesPage> {
                     itemBuilder: (context, index) {
                       final studentDoc = alunosMatriculados[index];
                       final student = studentDoc.data() as Map<String, dynamic>;
-                      return _buildStudentCard(
-                        student: student,
-                        isEnrolled: true,
-                        onPressed: () => _desmatricularAluno(studentDoc.id),
+                      return StaggeredFadeSlide(
+                        index: index,
+                        child: _buildStudentCard(
+                          student: student,
+                          isEnrolled: true,
+                          onPressed: () => _desmatricularAluno(studentDoc.id),
+                        ),
                       );
                     },
                   ),
@@ -217,10 +228,13 @@ class _TurmaDetalhesPageState extends State<TurmaDetalhesPage> {
                     itemBuilder: (context, index) {
                       final studentDoc = alunosDisponiveis[index];
                       final student = studentDoc.data() as Map<String, dynamic>;
-                      return _buildStudentCard(
-                        student: student,
-                        isEnrolled: false,
-                        onPressed: () => _matricularAluno(studentDoc.id),
+                      return StaggeredFadeSlide(
+                        index: index,
+                        child: _buildStudentCard(
+                          student: student,
+                          isEnrolled: false,
+                          onPressed: () => _matricularAluno(studentDoc.id),
+                        ),
                       );
                     },
                   ),
@@ -237,30 +251,33 @@ class _TurmaDetalhesPageState extends State<TurmaDetalhesPage> {
           _buildRelatoriosSection(),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => TurmaRelatorioPage(
-                escolaId: widget.escolaId,
-                turmaId: widget.turmaId,
-                turmaNome: widget.turmaNome,
+    ),
+      floatingActionButton: AnimatedFAB(
+        child: FloatingActionButton.extended(
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => TurmaRelatorioPage(
+                  escolaId: widget.escolaId,
+                  turmaId: widget.turmaId,
+                  turmaNome: widget.turmaNome,
+                ),
               ),
+            );
+          },
+          icon: const Icon(Icons.add_chart, color: Colors.white),
+          label: const Text(
+            'Novo Relatório',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
             ),
-          );
-        },
-        icon: const Icon(Icons.add_chart, color: Colors.white),
-        label: const Text(
-          'Novo Relatório',
-          style: TextStyle(
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
           ),
+          backgroundColor: AppColors.primary600,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          elevation: 4,
         ),
-        backgroundColor: const Color(0xFF00A74F),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        elevation: 4,
       ),
     );
   }
@@ -272,10 +289,10 @@ class _TurmaDetalhesPageState extends State<TurmaDetalhesPage> {
           width: 40,
           height: 40,
           decoration: BoxDecoration(
-            color: const Color(0xFF00A74F).withOpacity(0.1),
+            color: AppColors.primary600.withValues(alpha: 0.1),
             shape: BoxShape.circle,
           ),
-          child: Icon(icon, size: 20, color: const Color(0xFF00A74F)),
+          child: Icon(icon, size: 20, color: AppColors.primary600),
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -291,13 +308,13 @@ class _TurmaDetalhesPageState extends State<TurmaDetalhesPage> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
-            color: const Color(0xFF00A74F).withOpacity(0.1),
+            color: AppColors.primary600.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Text(
             '$count',
             style: const TextStyle(
-              color: Color(0xFF00A74F),
+              color: AppColors.primary600,
               fontWeight: FontWeight.w600,
               fontSize: 14,
             ),
@@ -315,7 +332,7 @@ class _TurmaDetalhesPageState extends State<TurmaDetalhesPage> {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
+            color: Colors.grey.withValues(alpha: 0.1),
             blurRadius: 6,
             offset: const Offset(0, 3),
           ),
@@ -327,7 +344,7 @@ class _TurmaDetalhesPageState extends State<TurmaDetalhesPage> {
           width: 44,
           height: 44,
           decoration: BoxDecoration(
-            color: const Color(0xFF00A74F).withOpacity(0.1),
+            color: AppColors.primary600.withValues(alpha: 0.1),
             shape: BoxShape.circle,
           ),
           child: Center(
@@ -338,7 +355,7 @@ class _TurmaDetalhesPageState extends State<TurmaDetalhesPage> {
               style: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: Color(0xFF00A74F),
+                color: AppColors.primary600,
               ),
             ),
           ),
@@ -358,7 +375,7 @@ class _TurmaDetalhesPageState extends State<TurmaDetalhesPage> {
             style: ElevatedButton.styleFrom(
               backgroundColor: isEnrolled
                   ? Colors.red.shade50
-                  : const Color(0xFF00A74F),
+                  : AppColors.primary600,
               foregroundColor: isEnrolled
                   ? Colors.red
                   : Colors.white,
@@ -431,7 +448,7 @@ class _TurmaDetalhesPageState extends State<TurmaDetalhesPage> {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(
                 child: CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00A74F)),
+                  valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary600),
                 ),
               );
             }
@@ -456,73 +473,76 @@ class _TurmaDetalhesPageState extends State<TurmaDetalhesPage> {
                     ? DateFormat('dd/MM/yyyy \'às\' HH:mm', 'pt_BR').format(data)
                     : 'Data indisponível';
 
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.grey.withOpacity(0.1),
-                        blurRadius: 6,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
-                  ),
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.all(16),
-                    leading: Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: Colors.blue.shade50,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.description_outlined,
-                        size: 20,
-                        color: Colors.blue,
-                      ),
-                    ),
-                    title: Text(
-                      "Relatório de $formattedDate",
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF2D3748),
-                      ),
-                    ),
-                    subtitle: Text(
-                      relatorio['conteudo'] ?? '',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Color(0xFF718096),
-                        fontSize: 12,
-                      ),
-                    ),
-                    trailing: Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF00A74F).withOpacity(0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.arrow_forward,
-                        size: 16,
-                        color: Color(0xFF00A74F),
-                      ),
-                    ),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => VisualizarRelatorioPage(
-                            relatorio: relatorioDoc,
-                          ),
+                return StaggeredFadeSlide(
+                  index: index,
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.grey.withValues(alpha: 0.1),
+                          blurRadius: 6,
+                          offset: const Offset(0, 3),
                         ),
-                      );
-                    },
+                      ],
+                    ),
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.all(16),
+                      leading: Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.description_outlined,
+                          size: 20,
+                          color: Colors.blue,
+                        ),
+                      ),
+                      title: Text(
+                        "Relatório de $formattedDate",
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF2D3748),
+                        ),
+                      ),
+                      subtitle: Text(
+                        relatorio['conteudo'] ?? '',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Color(0xFF718096),
+                          fontSize: 12,
+                        ),
+                      ),
+                      trailing: Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: AppColors.primary600.withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.arrow_forward,
+                          size: 16,
+                          color: AppColors.primary600,
+                        ),
+                      ),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => VisualizarRelatorioPage(
+                              relatorio: relatorioDoc,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
                   ),
                 );
               },

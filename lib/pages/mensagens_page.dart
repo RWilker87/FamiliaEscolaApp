@@ -1,83 +1,144 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
-import '../widgets/main_scaffold.dart';
+import '../shared/providers/user_provider.dart';
+import '../shared/widgets/confirm_dialog.dart';
+import '../shared/widgets/app_empty_state.dart';
+import '../shared/widgets/app_loading_skeleton.dart';
+import '../shared/widgets/conversation_tile.dart';
+import '../shared/widgets/staggered_fade_slide.dart';
 import 'selecionar_responsavel_page.dart';
 
-class MensagensPage extends StatelessWidget {
-  const MensagensPage({super.key});
+/// Abre (ou cria) uma conversa 1-1 entre [meUid] e [otherUid].
+/// Retorna o conversaId.
+Future<String> _openOrCreate1to1({
+  required String escolaId,
+  required String meUid,
+  required String otherUid,
+}) async {
+  // Ordena os UIDs para criar uma chave única determinística
+  final list = [meUid, otherUid]..sort();
+  final pairId = '${list[0]}_${list[1]}';
+  
+  final conversaRef = FirebaseFirestore.instance
+      .collection('escolas')
+      .doc(escolaId)
+      .collection('conversas')
+      .doc(pairId);
 
-  // ===== Helpers =====
+  // Pega dados do próprio usuário
+  final meDoc = await FirebaseFirestore.instance.collection('users').doc(meUid).get();
+  final meData = meDoc.data() ?? {};
+  final meuRole = meData['role'] ?? '';
 
-  /// Cria um ID determinístico para chat 1-1 (ordena UIDs e junta com "_")
-  String _pairKey(String a, String b) {
-    final list = [a, b]..sort();
-    return '${list[0]}_${list[1]}';
+  // Pega dados do outro usuário (se for gestor tem permissão total, senão retorna Gestão)
+  Map<String, dynamic> otherData = {};
+  if (meuRole == 'gestao') {
+    final otherDoc = await FirebaseFirestore.instance.collection('users').doc(otherUid).get();
+    otherData = otherDoc.data() ?? {};
   }
 
-  /// Abre (ou cria) uma conversa 1-1 entre [meUid] e [otherUid].
-  /// Retorna o conversaId.
-  Future<String> _openOrCreate1to1({
-    required String escolaId,
-    required String meUid,
-    required String otherUid,
-  }) async {
-    final pairId = _pairKey(meUid, otherUid);
+  final otherNome = otherData['nome'] ?? 'Gestão';
+  final otherRole = otherData['role'] ?? 'gestao';
+
+  await conversaRef.set({
+    'escolaId': escolaId,
+    'tipo': '1-1',
+    'participantes': [meUid, otherUid],
+    'participantesInfo': {
+      meUid: {'nome': meData['nome'] ?? 'Você', 'role': meuRole},
+      otherUid: {'nome': otherNome, 'role': otherRole},
+    },
+    'titulo': otherNome,
+    'ultimoTexto': '',
+    'atualizadoEm': FieldValue.serverTimestamp(),
+    'unread': {meUid: 0, otherUid: 0},
+  }, SetOptions(merge: true));
+
+  return conversaRef.id;
+}
+
+/// Helper compartilhado para deletar conversa e suas mensagens de forma limpa.
+Future<void> _deletarConversaCompartilhada({
+  required String escolaId,
+  required String conversaId,
+  required BuildContext context,
+  VoidCallback? onSuccess,
+}) async {
+  final uid = FirebaseAuth.instance.currentUser?.uid;
+  if (uid == null) return;
+
+  try {
     final conversaRef = FirebaseFirestore.instance
         .collection('escolas')
         .doc(escolaId)
         .collection('conversas')
-        .doc(pairId);
+        .doc(conversaId);
 
-    // pega dados do próprio usuário (sempre permitido)
-    final meData = (await FirebaseFirestore.instance
-        .collection('users')
-        .doc(meUid)
-        .get())
-        .data() ?? {};
+    final conversaDoc = await conversaRef.get();
+    if (!conversaDoc.exists) return;
 
-    Map<String, dynamic> otherData = {};
-
-    // só tenta buscar o outro se for gestor (tem permissão)
-    final meuRole = meData['role'] ?? '';
-    if (meuRole == 'gestao') {
-      otherData = (await FirebaseFirestore.instance
-          .collection('users')
-          .doc(otherUid)
-          .get())
-          .data() ?? {};
+    final participantes = List<String>.from(conversaDoc['participantes'] ?? []);
+    if (!participantes.contains(uid)) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Você não tem permissão para deletar esta conversa.')),
+        );
+      }
+      return;
     }
 
-    final otherNome = otherData['nome'] ?? 'Gestão';
-    final otherRole = otherData['role'] ?? 'gestao';
+    final confirmar = await ConfirmDialog.show(
+      context,
+      title: 'Deletar conversa',
+      message: 'Tem certeza que deseja deletar esta conversa? Esta ação não pode ser desfeita.',
+      confirmLabel: 'Deletar',
+      isDestructive: true,
+      onConfirm: () {},
+    );
 
-    await conversaRef.set({
-      'escolaId': escolaId,
-      'tipo': '1-1',
-      'participantes': [meUid, otherUid],
-      'participantesInfo': {
-        meUid: {'nome': meData['nome'] ?? 'Você', 'role': meuRole},
-        otherUid: {'nome': otherNome, 'role': otherRole},
-      },
-      'titulo': otherNome,
-      'ultimoTexto': '',
-      'atualizadoEm': FieldValue.serverTimestamp(),
-      'unread': {meUid: 0, otherUid: 0},
-    }, SetOptions(merge: true));
+    if (confirmar != true) return;
 
-    return conversaRef.id;
+    // Deleta mensagens
+    final mensagensSnapshot = await conversaRef.collection('mensagens').get();
+    final batch = FirebaseFirestore.instance.batch();
+    for (final doc in mensagensSnapshot.docs) {
+      batch.delete(doc.reference);
+    }
+    await batch.commit();
+
+    // Deleta conversa
+    await conversaRef.delete();
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Conversa deletada com sucesso.')),
+      );
+      if (onSuccess != null) {
+        onSuccess();
+      }
+    }
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao deletar conversa: $e')),
+      );
+    }
   }
+}
 
-  /// Para RESPONSÁVEL: encontra o gestor da escola (direto no doc da escola)
-  /// e abre/cria o chat 1–1.
+class MensagensPage extends ConsumerWidget {
+  const MensagensPage({super.key});
+
   Future<void> _startChatWithGestor(
-      BuildContext context, {
-        required String escolaId,
-        required String myUid,
-      }) async {
+    BuildContext context, {
+    required String escolaId,
+    required String myUid,
+  }) async {
     try {
-      // Lê o doc da escola e pega o gestorId
       final escolaDoc = await FirebaseFirestore.instance
           .collection('escolas')
           .doc(escolaId)
@@ -93,14 +154,12 @@ class MensagensPage extends StatelessWidget {
         return;
       }
 
-      // Usa gestorId para abrir ou criar conversa
       final conversaId = await _openOrCreate1to1(
         escolaId: escolaId,
         meUid: myUid,
         otherUid: gestorId,
       );
 
-      // Navega para a thread
       if (context.mounted) {
         Navigator.push(
           context,
@@ -121,428 +180,190 @@ class MensagensPage extends StatelessWidget {
     }
   }
 
-  /// Deleta uma conversa e todas as suas mensagens
-  Future<void> _deletarConversa({
-    required String escolaId,
-    required String conversaId,
-    required BuildContext context,
-  }) async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
-
-    try {
-      final conversaRef = FirebaseFirestore.instance
-          .collection('escolas')
-          .doc(escolaId)
-          .collection('conversas')
-          .doc(conversaId);
-
-      // Primeiro verifica se o usuário é participante da conversa
-      final conversaDoc = await conversaRef.get();
-      if (!conversaDoc.exists) return;
-
-      final participantes = List<String>.from(conversaDoc['participantes'] ?? []);
-      if (!participantes.contains(uid)) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Você não tem permissão para deletar esta conversa.')),
-        );
-        return;
-      }
-
-      // Mostra diálogo de confirmação
-      final confirmar = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Deletar conversa'),
-          content: const Text('Tem certeza que deseja deletar esta conversa? Esta ação não pode ser desfeita.'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancelar'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Deletar', style: TextStyle(color: Colors.red)),
-            ),
-          ],
-        ),
-      );
-
-      if (confirmar != true) return;
-
-      // Deleta todas as mensagens primeiro
-      final mensagensSnapshot = await conversaRef.collection('mensagens').get();
-      final batch = FirebaseFirestore.instance.batch();
-      for (final doc in mensagensSnapshot.docs) {
-        batch.delete(doc.reference);
-      }
-      await batch.commit();
-
-      // Deleta a conversa
-      await conversaRef.delete();
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Conversa deletada com sucesso.')),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erro ao deletar conversa: $e')),
-      );
-    }
-  }
-
   @override
-  Widget build(BuildContext context) {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) {
-      return const Scaffold(body: Center(child: Text("Usuário não autenticado")));
-    }
+  Widget build(BuildContext context, WidgetRef ref) {
+    final userModelAsync = ref.watch(userModelProvider);
 
-    return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance.collection("users").doc(uid).snapshots(),
-      builder: (context, userSnapshot) {
-        if (!userSnapshot.hasData) {
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    return userModelAsync.when(
+      data: (user) {
+        if (user == null) {
+          return const Scaffold(
+            body: Center(child: Text("Usuário não encontrado")),
+          );
         }
 
-        final userData = userSnapshot.data!.data() as Map<String, dynamic>?;
-        if (userData == null || !userData.containsKey("escolaId")) {
-          return const Scaffold(body: Center(child: Text("Usuário não vinculado a uma escola")));
-        }
+        final uid = user.uid;
+        final escolaId = user.escolaId;
+        final isGestor = user.isGestor;
 
-        final escolaId = userData["escolaId"] as String;
-        final role = (userData["role"] ?? "responsavel") as String;
+        if (escolaId == null || escolaId.isEmpty) {
+          return const Scaffold(
+            body: Center(child: Text("Usuário não vinculado a uma escola")),
+          );
+        }
 
         final conversasStream = FirebaseFirestore.instance
-            .collection("escolas").doc(escolaId)
+            .collection("escolas")
+            .doc(escolaId)
             .collection("conversas")
             .where("participantes", arrayContains: uid)
             .orderBy("atualizadoEm", descending: true)
             .snapshots();
 
-        return MainScaffold(
-          currentIndex: 3,
-          body: Column(
-            children: [
-              // Header
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.grey.withOpacity(0.1),
-                      blurRadius: 4,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      "Conversas",
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF2D3748),
+        return Scaffold(
+          backgroundColor: const Color(0xFFF8FAFC),
+          appBar: AppBar(
+            title: const Text(
+              "Mensagens",
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
+            ),
+            elevation: 0,
+            backgroundColor: Colors.white,
+            centerTitle: false,
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.add_comment_outlined),
+                tooltip: "Nova conversa",
+                onPressed: () async {
+                  if (isGestor) {
+                    final selected = await Navigator.push<Map<String, dynamic>?>(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => SelecionarResponsavelPage(escolaId: escolaId),
                       ),
-                    ),
-                    IconButton(
-                      icon: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF00A74F),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(Icons.add_comment, size: 22, color: Colors.white),
-                      ),
-                      onPressed: () async {
-                        if (role == 'gestao') {
-                          // abre a lista de responsáveis
-                          final selected = await Navigator.push<Map<String, dynamic>?>(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => SelecionarResponsavelPage(escolaId: escolaId),
-                            ),
-                          );
-                          if (selected != null && selected['uid'] != null) {
-                            final conversaId = await _openOrCreate1to1(
-                              escolaId: escolaId,
-                              meUid: uid,
-                              otherUid: selected['uid'] as String,
-                            );
-                            if (context.mounted) {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => MensagensThreadPage(
-                                      escolaId: escolaId, conversaId: conversaId),
-                                ),
-                              );
-                            }
-                          }
-                        } else {
-                          await _startChatWithGestor(context, escolaId: escolaId, myUid: uid);
-                        }
-                      },
-                    ),
-                  ],
-                ),
-              ),
-
-              // Lista de conversas
-              Expanded(
-                child: StreamBuilder<QuerySnapshot>(
-                  stream: conversasStream,
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(
-                        child: CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(Color(
-                              0xFF00A74F)),
-                        ),
+                    );
+                    if (selected != null && selected['uid'] != null) {
+                      final conversaId = await _openOrCreate1to1(
+                        escolaId: escolaId,
+                        meUid: uid,
+                        otherUid: selected['uid'] as String,
                       );
-                    }
-
-                    // Estado vazio com CTA
-                    if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                      return Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(20.0),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.forum_outlined,
-                                size: 80,
-                                color: Colors.grey[300],
-                              ),
-                              const SizedBox(height: 16),
-                              const Text(
-                                "Nenhuma conversa",
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
-                                  color: Color(0xFF718096),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                role == 'gestao'
-                                    ? 'Inicie uma conversa com um responsável'
-                                    : 'Entre em contato com a escola',
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                  color: Color(0xFFA0AEC0),
-                                  fontSize: 14,
-                                ),
-                              ),
-                              const SizedBox(height: 24),
-                              ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF00A74F),
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  elevation: 0,
-                                ),
-                                onPressed: () async {
-                                  if (role == 'gestao') {
-                                    // abre a lista de responsáveis
-                                    final selected = await Navigator.push<Map<String, dynamic>?>(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) => SelecionarResponsavelPage(escolaId: escolaId),
-                                      ),
-                                    );
-                                    if (selected != null && selected['uid'] != null) {
-                                      final conversaId = await _openOrCreate1to1(
-                                        escolaId: escolaId,
-                                        meUid: uid,
-                                        otherUid: selected['uid'] as String,
-                                      );
-                                      if (context.mounted) {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (_) => MensagensThreadPage(
-                                                escolaId: escolaId, conversaId: conversaId),
-                                          ),
-                                        );
-                                      }
-                                    }
-                                  } else {
-                                    await _startChatWithGestor(context, escolaId: escolaId, myUid: uid);
-                                  }
-                                },
-                                child: Text(role == 'gestao' ? 'Nova conversa' : 'Conversar com a escola'),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }
-
-                    // Lista de conversas
-                    return ListView.separated(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                      itemCount: snapshot.data!.docs.length,
-                      separatorBuilder: (context, index) => const Divider(height: 1, indent: 72),
-                      itemBuilder: (context, index) {
-                        final doc = snapshot.data!.docs[index];
-                        final dados = doc.data() as Map<String, dynamic>;
-                        final ultimoTexto = (dados['ultimoTexto'] ?? '').toString();
-                        final unreadMap = Map<String, dynamic>.from(dados['unread'] ?? {});
-                        final int minhasNaoLidas = (unreadMap[uid] is int) ? unreadMap[uid] as int : 0;
-                        final atualizadoEm = (dados['atualizadoEm'] as Timestamp?)?.toDate();
-                        final timeStr = atualizadoEm != null
-                            ? DateFormat.Hm().format(atualizadoEm)
-                            : '';
-
-                        return Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: minhasNaoLidas > 0
-                                ? const Color(0xFFEBF4FF)
-                                : Colors.white,
-                            borderRadius: BorderRadius.circular(12),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.grey.withOpacity(0.05),
-                                blurRadius: 4,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: ListTile(
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            leading: Container(
-                              width: 52,
-                              height: 52,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF00A74F).withOpacity(0.1),
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(
-                                Icons.person,
-                                color: const Color(0xFF00A74F),
-                                size: 24,
-                              ),
-                            ),
-                            title: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    (dados['titulo'] ?? 'Conversa').toString(),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontWeight: minhasNaoLidas > 0 ? FontWeight.w700 : FontWeight.w600,
-                                      fontSize: 16,
-                                      color: const Color(0xFF2D3748),
-                                    ),
-                                  ),
-                                ),
-                                Text(
-                                  timeStr,
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: Color(0xFFA0AEC0),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            subtitle: Padding(
-                              padding: const EdgeInsets.only(top: 4.0),
-                              child: Text(
-                                ultimoTexto,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: minhasNaoLidas > 0
-                                      ? const Color(0xFF00A74F)
-                                      : const Color(0xFF718096),
-                                  fontWeight: minhasNaoLidas > 0 ? FontWeight.w500 : FontWeight.normal,
-                                  fontSize: 14,
-                                ),
-                              ),
-                            ),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (minhasNaoLidas > 0)
-                                  Container(
-                                    width: 22,
-                                    height: 22,
-                                    margin: const EdgeInsets.only(right: 8),
-                                    decoration: const BoxDecoration(
-                                      color: Color(0xFFE53E3E),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: Center(
-                                      child: Text(
-                                        minhasNaoLidas > 9 ? '9+' : '$minhasNaoLidas',
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 10,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                PopupMenuButton<String>(
-                                  icon: Icon(Icons.more_vert, color: Colors.grey[600], size: 20),
-                                  onSelected: (value) {
-                                    if (value == 'delete') {
-                                      _deletarConversa(
-                                        escolaId: escolaId,
-                                        conversaId: doc.id,
-                                        context: context,
-                                      );
-                                    }
-                                  },
-                                  itemBuilder: (BuildContext context) => [
-                                    const PopupMenuItem<String>(
-                                      value: 'delete',
-                                      child: Row(
-                                        children: [
-                                          Icon(Icons.delete, color: Colors.red, size: 20),
-                                          SizedBox(width: 8),
-                                          Text('Deletar conversa', style: TextStyle(color: Colors.red)),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => MensagensThreadPage(escolaId: escolaId, conversaId: doc.id),
-                                ),
-                              );
-                            },
+                      if (context.mounted) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => MensagensThreadPage(
+                                escolaId: escolaId, conversaId: conversaId),
                           ),
                         );
-                      },
+                      }
+                    }
+                  } else {
+                    await _startChatWithGestor(context, escolaId: escolaId, myUid: uid);
+                  }
+                },
+              ),
+              const SizedBox(width: 8),
+            ],
+          ),
+          body: StreamBuilder<QuerySnapshot>(
+            stream: conversasStream,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return AppLoadingSkeleton.list();
+              }
+
+              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                return AppEmptyState(
+                  icon: Icons.forum_outlined,
+                  title: "Nenhuma conversa ativa",
+                  description: isGestor
+                      ? 'Inicie uma conversa com os responsáveis dos alunos'
+                      : 'Converse com a coordenação ou professores da escola',
+                  actionLabel: isGestor ? 'Iniciar conversa' : 'Conversar com a escola',
+                  onActionPressed: () async {
+                    if (isGestor) {
+                      final selected = await Navigator.push<Map<String, dynamic>?>(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => SelecionarResponsavelPage(escolaId: escolaId),
+                        ),
+                      );
+                      if (selected != null && selected['uid'] != null) {
+                        final conversaId = await _openOrCreate1to1(
+                          escolaId: escolaId,
+                          meUid: uid,
+                          otherUid: selected['uid'] as String,
+                        );
+                        if (context.mounted) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => MensagensThreadPage(
+                                  escolaId: escolaId, conversaId: conversaId),
+                            ),
+                          );
+                        }
+                      }
+                    } else {
+                      await _startChatWithGestor(context, escolaId: escolaId, myUid: uid);
+                    }
+                  },
+                );
+              }
+
+              return RefreshIndicator(
+                onRefresh: () async {
+                  await Future.delayed(const Duration(milliseconds: 800));
+                },
+                child: ListView.builder(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.all(12),
+                  itemCount: snapshot.data!.docs.length,
+                  itemBuilder: (context, index) {
+                    final doc = snapshot.data!.docs[index];
+                    final dados = doc.data() as Map<String, dynamic>;
+                    final ultimoTexto = (dados['ultimoTexto'] ?? '').toString();
+                    final unreadMap = Map<String, dynamic>.from(dados['unread'] ?? {});
+                    final int minhasNaoLidas = (unreadMap[uid] is int) ? unreadMap[uid] as int : 0;
+                    final atualizadoEm = (dados['atualizadoEm'] as Timestamp?)?.toDate();
+                    final timeStr = atualizadoEm != null
+                        ? DateFormat('HH:mm').format(atualizadoEm)
+                        : '';
+
+                    return StaggeredFadeSlide(
+                      index: index,
+                      child: ConversationTile(
+                        title: (dados['titulo'] ?? 'Conversa').toString(),
+                        lastMessage: ultimoTexto,
+                        time: timeStr,
+                        unreadCount: minhasNaoLidas,
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => MensagensThreadPage(escolaId: escolaId, conversaId: doc.id),
+                            ),
+                          );
+                        },
+                        onDelete: () {
+                          _deletarConversaCompartilhada(
+                            escolaId: escolaId,
+                            conversaId: doc.id,
+                            context: context,
+                          );
+                        },
+                      ),
                     );
                   },
                 ),
-              ),
-            ],
+              );
+            },
           ),
         );
       },
+      loading: () => Scaffold(
+        backgroundColor: const Color(0xFFF8FAFC),
+        body: AppLoadingSkeleton.list(),
+      ),
+      error: (err, stack) => Scaffold(
+        body: Center(child: Text("Erro ao carregar mensagens: $err")),
+      ),
     );
   }
 }
 
-class MensagensThreadPage extends StatefulWidget {
+class MensagensThreadPage extends ConsumerStatefulWidget {
   final String escolaId;
   final String conversaId;
 
@@ -553,12 +374,11 @@ class MensagensThreadPage extends StatefulWidget {
   });
 
   @override
-  State<MensagensThreadPage> createState() => _MensagensThreadPageState();
+  ConsumerState<MensagensThreadPage> createState() => _MensagensThreadPageState();
 }
 
-class _MensagensThreadPageState extends State<MensagensThreadPage> {
+class _MensagensThreadPageState extends ConsumerState<MensagensThreadPage> {
   final _msgCtrl = TextEditingController();
-  final _auth = FirebaseAuth.instance;
   final _scrollController = ScrollController();
   bool _marcouLidasNaAbertura = false;
 
@@ -566,7 +386,8 @@ class _MensagensThreadPageState extends State<MensagensThreadPage> {
   void initState() {
     super.initState();
     _marcarConversaComoLida();
-    // Scroll para o final quando as mensagens carregarem
+    
+    // Scroll inicial
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
         _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
@@ -577,12 +398,13 @@ class _MensagensThreadPageState extends State<MensagensThreadPage> {
   @override
   void dispose() {
     _scrollController.dispose();
+    _msgCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _marcarConversaComoLida() async {
     if (_marcouLidasNaAbertura) return;
-    final uid = _auth.currentUser?.uid;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
 
     final conversaRef = FirebaseFirestore.instance
@@ -596,7 +418,7 @@ class _MensagensThreadPageState extends State<MensagensThreadPage> {
 
       final batch = FirebaseFirestore.instance.batch();
       for (final m in msgs.docs) {
-        final data = m.data() as Map<String, dynamic>;
+        final data = m.data();
         final lidoPor = List<String>.from(data['lidoPor'] ?? []);
         if (!lidoPor.contains(uid)) {
           batch.update(m.reference, {'lidoPor': FieldValue.arrayUnion([uid])});
@@ -609,7 +431,7 @@ class _MensagensThreadPageState extends State<MensagensThreadPage> {
   }
 
   Future<void> _marcarMensagensVisiveisComoLidas(List<QueryDocumentSnapshot> docs) async {
-    final uid = _auth.currentUser?.uid;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null || docs.isEmpty) return;
 
     final batch = FirebaseFirestore.instance.batch();
@@ -624,8 +446,10 @@ class _MensagensThreadPageState extends State<MensagensThreadPage> {
   }
 
   Future<void> _enviarMensagem() async {
-    final uid = _auth.currentUser?.uid;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null || _msgCtrl.text.trim().isEmpty) return;
+
+    HapticFeedback.lightImpact();
 
     final userDoc = await FirebaseFirestore.instance.collection("users").doc(uid).get();
     final userData = userDoc.data() ?? {};
@@ -643,12 +467,12 @@ class _MensagensThreadPageState extends State<MensagensThreadPage> {
       "conteudo": conteudo,
       "tipo": "texto",
       "data": FieldValue.serverTimestamp(),
-      "lidoPor": [uid], // autor já leu
+      "lidoPor": [uid],
     });
 
     // 2) atualiza conversa
     final convSnap = await conversaRef.get();
-    final convData = (convSnap.data() ?? {}) as Map<String, dynamic>;
+    final convData = convSnap.data() ?? {};
     final participantes = List<String>.from(convData['participantes'] ?? []);
     final unread = Map<String, dynamic>.from(convData['unread'] ?? {});
 
@@ -665,7 +489,7 @@ class _MensagensThreadPageState extends State<MensagensThreadPage> {
 
     _msgCtrl.clear();
 
-    // Scroll para o final após enviar mensagem
+    // Auto scroll para o final após o envio manual
     if (_scrollController.hasClients) {
       _scrollController.animateTo(
         _scrollController.position.maxScrollExtent,
@@ -677,24 +501,30 @@ class _MensagensThreadPageState extends State<MensagensThreadPage> {
 
   @override
   Widget build(BuildContext context) {
-    final uid = _auth.currentUser?.uid;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
 
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text(
           "Conversa",
-          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
         ),
         backgroundColor: Colors.white,
         foregroundColor: const Color(0xFF2D3748),
-        elevation: 1,
-        iconTheme: const IconThemeData(color: Color(0xFF00A74F)),
+        elevation: 0.5,
+        iconTheme: IconThemeData(color: Theme.of(context).colorScheme.primary),
         actions: [
           PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert, color: Color(0xFF00A74F)),
+            icon: Icon(Icons.more_vert, color: Theme.of(context).colorScheme.primary),
             onSelected: (value) {
               if (value == 'delete') {
-                _deletarConversa(context);
+                _deletarConversaCompartilhada(
+                  escolaId: widget.escolaId,
+                  conversaId: widget.conversaId,
+                  context: context,
+                  onSuccess: () => Navigator.pop(context),
+                );
               }
             },
             itemBuilder: (BuildContext context) => [
@@ -702,7 +532,7 @@ class _MensagensThreadPageState extends State<MensagensThreadPage> {
                 value: 'delete',
                 child: Row(
                   children: [
-                    Icon(Icons.delete, color: Colors.red, size: 20),
+                    Icon(Icons.delete_outline, color: Colors.red, size: 20),
                     SizedBox(width: 8),
                     Text('Deletar conversa', style: TextStyle(color: Colors.red)),
                   ],
@@ -724,15 +554,26 @@ class _MensagensThreadPageState extends State<MensagensThreadPage> {
                   .snapshots(),
               builder: (context, snapshot) {
                 if (!snapshot.hasData) {
-                  return const Center(
-                    child: CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(Color(
-                          0xFF00A74F)),
-                    ),
-                  );
+                  return const Center(child: CircularProgressIndicator());
                 }
                 final mensagens = snapshot.data!.docs;
                 _marcarMensagensVisiveisComoLidas(mensagens.cast<QueryDocumentSnapshot>());
+
+                // Inteligência de scroll quando novas mensagens chegam via Stream
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (_scrollController.hasClients) {
+                    final maxScroll = _scrollController.position.maxScrollExtent;
+                    final currentScroll = _scrollController.position.pixels;
+                    // Se estiver próximo do fim (150 pixels ou menos)
+                    if (maxScroll - currentScroll < 150) {
+                      _scrollController.animateTo(
+                        maxScroll,
+                        duration: const Duration(milliseconds: 200),
+                        curve: Curves.easeOut,
+                      );
+                    }
+                  }
+                });
 
                 return ListView.builder(
                   controller: _scrollController,
@@ -745,7 +586,7 @@ class _MensagensThreadPageState extends State<MensagensThreadPage> {
                     final conteudo = (data["conteudo"] ?? "").toString();
                     final timestamp = (data["data"] as Timestamp?)?.toDate();
                     final timeStr = timestamp != null
-                        ? DateFormat.Hm().format(timestamp)
+                        ? DateFormat('HH:mm').format(timestamp)
                         : '';
                     final lidoPor = List<String>.from(data['lidoPor'] ?? []);
                     final isMe = autorId == uid;
@@ -761,13 +602,18 @@ class _MensagensThreadPageState extends State<MensagensThreadPage> {
                               width: 36,
                               height: 36,
                               decoration: BoxDecoration(
-                                color: const Color(0xFF00A74F).withOpacity(0.1),
+                                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
                                 shape: BoxShape.circle,
                               ),
-                              child: Icon(
-                                  Icons.person,
-                                  size: 18,
-                                  color: const Color(0xFF00A74F)
+                              child: Center(
+                                child: Text(
+                                  autorNome.isNotEmpty ? autorNome[0].toUpperCase() : '?',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                    color: Theme.of(context).colorScheme.primary,
+                                  ),
+                                ),
                               ),
                             ),
                           if (!isMe) const SizedBox(width: 8),
@@ -776,12 +622,12 @@ class _MensagensThreadPageState extends State<MensagensThreadPage> {
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                               decoration: BoxDecoration(
                                 color: isMe
-                                    ? const Color(0xFF00A74F)
-                                    : const Color(0xFFF7FAFC),
+                                    ? Theme.of(context).colorScheme.primary
+                                    : const Color(0xFFF1F5F9),
                                 borderRadius: BorderRadius.circular(18),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.black.withOpacity(0.05),
+                                    color: Colors.black.withValues(alpha: 0.03),
                                     blurRadius: 4,
                                     offset: const Offset(0, 2),
                                   ),
@@ -794,16 +640,16 @@ class _MensagensThreadPageState extends State<MensagensThreadPage> {
                                     Text(
                                       autorNome,
                                       style: TextStyle(
-                                        fontWeight: FontWeight.w600,
+                                        fontWeight: FontWeight.bold,
                                         fontSize: 12,
-                                        color: const Color(0xFF00A74F),
+                                        color: Theme.of(context).colorScheme.primary,
                                       ),
                                     ),
                                   if (!isMe) const SizedBox(height: 4),
                                   Text(
                                     conteudo,
                                     style: TextStyle(
-                                      color: isMe ? Colors.white : const Color(0xFF2D3748),
+                                      color: isMe ? Colors.white : const Color(0xFF1E293B),
                                       fontSize: 15,
                                     ),
                                   ),
@@ -815,13 +661,18 @@ class _MensagensThreadPageState extends State<MensagensThreadPage> {
                                         timeStr,
                                         style: TextStyle(
                                           fontSize: 10,
-                                          color: isMe ? Colors.white70 : const Color(0xFFA0AEC0),
+                                          color: isMe ? Colors.white70 : const Color(0xFF64748B),
                                         ),
                                       ),
+                                      if (isMe) const SizedBox(width: 4),
                                       if (isMe)
-                                        const SizedBox(width: 4),
-                                      if (isMe && outrosLeram)
-                                        const Icon(Icons.done_all, size: 14, color: Colors.white70),
+                                        Icon(
+                                          Icons.done_all,
+                                          size: 14,
+                                          color: outrosLeram
+                                              ? const Color(0xFF86EFAC) // check lido verde
+                                              : Colors.white60, // check entregue cinza claro
+                                        ),
                                     ],
                                   ),
                                 ],
@@ -840,30 +691,23 @@ class _MensagensThreadPageState extends State<MensagensThreadPage> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
               color: Colors.white,
-              border: Border(top: BorderSide(color: Colors.grey[300]!)),
+              border: Border(top: BorderSide(color: Colors.grey[200]!)),
             ),
             child: Row(
               children: [
                 Expanded(
                   child: Container(
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF7FAFC),
+                      color: const Color(0xFFF1F5F9),
                       borderRadius: BorderRadius.circular(24),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
-                          blurRadius: 4,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
                     ),
                     child: TextField(
                       controller: _msgCtrl,
                       decoration: const InputDecoration(
                         hintText: "Digite sua mensagem...",
                         border: InputBorder.none,
-                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                        hintStyle: TextStyle(color: Color(0xFFA0AEC0)),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        hintStyle: TextStyle(color: Color(0xFF94A3B8)),
                       ),
                       onSubmitted: (_) => _enviarMensagem(),
                     ),
@@ -871,12 +715,12 @@ class _MensagensThreadPageState extends State<MensagensThreadPage> {
                 ),
                 const SizedBox(width: 8),
                 Container(
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF00A74F),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primary,
                     shape: BoxShape.circle,
                   ),
                   child: IconButton(
-                    icon: const Icon(Icons.send, color: Colors.white, size: 22),
+                    icon: const Icon(Icons.send, color: Colors.white, size: 20),
                     onPressed: _enviarMensagem,
                   ),
                 ),
@@ -886,76 +730,5 @@ class _MensagensThreadPageState extends State<MensagensThreadPage> {
         ],
       ),
     );
-  }
-
-  // Função para deletar conversa a partir da página de thread
-  Future<void> _deletarConversa(BuildContext context) async {
-    final uid = _auth.currentUser?.uid;
-    if (uid == null) return;
-
-    try {
-      final conversaRef = FirebaseFirestore.instance
-          .collection('escolas')
-          .doc(widget.escolaId)
-          .collection('conversas')
-          .doc(widget.conversaId);
-
-      // Primeiro verifica se o usuário é participante da conversa
-      final conversaDoc = await conversaRef.get();
-      if (!conversaDoc.exists) return;
-
-      final participantes = List<String>.from(conversaDoc['participantes'] ?? []);
-      if (!participantes.contains(uid)) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Você não tem permissão para deletar esta conversa.')),
-        );
-        return;
-      }
-
-      // Mostra diálogo de confirmação
-      final confirmar = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Deletar conversa'),
-          content: const Text('Tem certeza que deseja deletar esta conversa? Esta ação não pode ser desfeita.'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancelar'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Deletar', style: TextStyle(color: Colors.red)),
-            ),
-          ],
-        ),
-      );
-
-      if (confirmar != true) return;
-
-      // Deleta todas as mensagens primeiro
-      final mensagensSnapshot = await conversaRef.collection('mensagens').get();
-      final batch = FirebaseFirestore.instance.batch();
-      for (final doc in mensagensSnapshot.docs) {
-        batch.delete(doc.reference);
-      }
-      await batch.commit();
-
-      // Deleta a conversa
-      await conversaRef.delete();
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Conversa deletada com sucesso.')),
-      );
-
-      // Volta para a página anterior
-      if (context.mounted) {
-        Navigator.of(context).pop();
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erro ao deletar conversa: $e')),
-      );
-    }
   }
 }

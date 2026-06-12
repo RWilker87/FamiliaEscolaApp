@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/constants/app_colors.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -53,7 +54,6 @@ class _AdicionarAvisoPageState extends State<AdicionarAvisoPage> {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
 
-    // ✅ Validações
     if (_tituloCtrl.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -130,7 +130,7 @@ class _AdicionarAvisoPageState extends State<AdicionarAvisoPage> {
             content: Text(widget.avisoId == null
                 ? 'Aviso criado com sucesso!'
                 : 'Aviso atualizado com sucesso!'),
-            backgroundColor: const Color(0xFF00A74F),
+            backgroundColor: AppColors.primary600,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           ),
@@ -186,7 +186,7 @@ class _AdicionarAvisoPageState extends State<AdicionarAvisoPage> {
             color: Colors.white,
           ),
         ),
-        backgroundColor: const Color(0xFF00A74F),
+        backgroundColor: AppColors.primary600,
         foregroundColor: Colors.white,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
@@ -194,7 +194,7 @@ class _AdicionarAvisoPageState extends State<AdicionarAvisoPage> {
       body: _loading
           ? const Center(
         child: CircularProgressIndicator(
-          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00A74F)),
+          valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary600),
         ),
       )
           : Padding(
@@ -231,7 +231,7 @@ class _AdicionarAvisoPageState extends State<AdicionarAvisoPage> {
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFF00A74F), width: 2),
+                          borderSide: const BorderSide(color: AppColors.primary600, width: 2),
                         ),
                         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                       ),
@@ -263,7 +263,7 @@ class _AdicionarAvisoPageState extends State<AdicionarAvisoPage> {
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFF00A74F), width: 2),
+                          borderSide: const BorderSide(color: AppColors.primary600, width: 2),
                         ),
                         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                       ),
@@ -293,12 +293,12 @@ class _AdicionarAvisoPageState extends State<AdicionarAvisoPage> {
                           value: _destino,
                           isExpanded: true,
                           // menuMaxHeight: 300,
-                          icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF00A74F)),
+                          icon: const Icon(Icons.arrow_drop_down, color: AppColors.primary600),
                           items: const [
                             DropdownMenuItem(
                               value: "escola",
                               child: ListTile(
-                                leading: Icon(Icons.school, color: Color(0xFF00A74F)),
+                                leading: Icon(Icons.school, color: AppColors.primary600),
                                 title: Text("Toda a Escola"),
                                 subtitle: Text("Todos os alunos e responsáveis"),
                               ),
@@ -306,7 +306,7 @@ class _AdicionarAvisoPageState extends State<AdicionarAvisoPage> {
                             DropdownMenuItem(
                               value: "turma",
                               child: ListTile(
-                                leading: Icon(Icons.group, color: Color(0xFF00A74F)),
+                                leading: Icon(Icons.group, color: AppColors.primary600),
                                 title: Text("Turma específica"),
                                 subtitle: Text("Selecione uma ou mais turmas"),
                               ),
@@ -314,7 +314,7 @@ class _AdicionarAvisoPageState extends State<AdicionarAvisoPage> {
                             DropdownMenuItem(
                               value: "aluno",
                               child: ListTile(
-                                leading: Icon(Icons.person, color: Color(0xFF00A74F)),
+                                leading: Icon(Icons.person, color: AppColors.primary600),
                                 title: Text("Aluno específico"),
                                 subtitle: Text("Selecione um ou mais alunos"),
                               ),
@@ -371,7 +371,7 @@ class _AdicionarAvisoPageState extends State<AdicionarAvisoPage> {
                                 style: const TextStyle(fontSize: 14),
                               ),
                               value: selected,
-                              activeColor: const Color(0xFF00A74F),
+                              activeColor: AppColors.primary600,
                               onChanged: (val) {
                                 setState(() {
                                   if (val == true) {
@@ -428,7 +428,7 @@ class _AdicionarAvisoPageState extends State<AdicionarAvisoPage> {
                                 style: const TextStyle(fontSize: 14),
                               ),
                               value: selected,
-                              activeColor: const Color(0xFF00A74F),
+                              activeColor: AppColors.primary600,
                               onChanged: (val) {
                                 setState(() {
                                   if (val == true) {
@@ -456,7 +456,7 @@ class _AdicionarAvisoPageState extends State<AdicionarAvisoPage> {
               child: ElevatedButton(
                 onPressed: _salvarAviso,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF00A74F),
+                  backgroundColor: AppColors.primary600,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(

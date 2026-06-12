@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/constants/app_colors.dart';
 import '../services/school_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -98,7 +99,7 @@ class _EditSchoolPageState extends State<EditSchoolPage> {
             color: Colors.white,
           ),
         ),
-        backgroundColor: const Color(0xFF00A74F),
+        backgroundColor: AppColors.primary600,
         foregroundColor: Colors.white,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
@@ -106,7 +107,7 @@ class _EditSchoolPageState extends State<EditSchoolPage> {
       body: _loading
           ? const Center(
         child: CircularProgressIndicator(
-          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00A74F)),
+          valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary600),
         ),
       )
           : SingleChildScrollView(
@@ -125,13 +126,13 @@ class _EditSchoolPageState extends State<EditSchoolPage> {
                       width: 50,
                       height: 50,
                       decoration: BoxDecoration(
-                        color: const Color(0xFF00A74F).withOpacity(0.1),
+                        color: AppColors.primary600.withValues(alpha: 0.1),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(
                         Icons.school,
                         size: 26,
-                        color: Color(0xFF00A74F),
+                        color: AppColors.primary600,
                       ),
                     ),
                     const SizedBox(width: 16),
@@ -193,7 +194,7 @@ class _EditSchoolPageState extends State<EditSchoolPage> {
                 child: ElevatedButton(
                   onPressed: _updateSchool,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF00A74F),
+                    backgroundColor: AppColors.primary600,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
@@ -256,7 +257,7 @@ class _EditSchoolPageState extends State<EditSchoolPage> {
       children: [
         Row(
           children: [
-            Icon(icon, size: 20, color: const Color(0xFF00A74F)),
+            Icon(icon, size: 20, color: AppColors.primary600),
             const SizedBox(width: 8),
             Text(
               label,
@@ -290,7 +291,7 @@ class _EditSchoolPageState extends State<EditSchoolPage> {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFF00A74F), width: 2),
+              borderSide: const BorderSide(color: AppColors.primary600, width: 2),
             ),
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),

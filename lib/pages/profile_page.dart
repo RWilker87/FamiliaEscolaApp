@@ -1,146 +1,128 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 
-import '../services/auth_service.dart';
 import '../services/student_service.dart';
-import '../widgets/main_scaffold.dart';
-
+import '../shared/providers/user_provider.dart';
+import '../shared/widgets/app_avatar.dart';
+import '../shared/widgets/confirm_dialog.dart';
+import '../shared/widgets/app_empty_state.dart';
+import '../shared/widgets/app_loading_skeleton.dart';
+import '../core/constants/app_shadows.dart';
+import '../core/constants/app_colors.dart';
 import 'profile_edit_page.dart';
 import 'school_details_page.dart';
 import 'aluno_detalhes_page.dart';
+import '../data/models/student_model.dart';
 
-class ProfilePage extends StatelessWidget {
+class ProfilePage extends ConsumerWidget {
   const ProfilePage({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final authService = AuthService();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final userModelAsync = ref.watch(userModelProvider);
     final studentService = StudentService();
-    final currentUser = authService.currentUser;
 
-    if (currentUser == null) {
-      return const Scaffold(
-        body: Center(child: Text("Usuário não autenticado")),
-      );
-    }
-
-    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('users')
-          .doc(currentUser.uid)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
+    return userModelAsync.when(
+      data: (user) {
+        if (user == null) {
           return const Scaffold(
-            body: Center(
-              child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00A74F)),
-              ),
-            ),
+            body: Center(child: Text("Usuário não encontrado")),
           );
         }
 
-        if (!snapshot.hasData || snapshot.data?.data() == null) {
-          return const Scaffold(
-            body: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.error_outline,
-                    size: 64,
-                    color: Color(0xFFA0AEC0),
-                  ),
-                  SizedBox(height: 16),
-                  Text(
-                    "Dados do usuário não encontrados",
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Color(0xFF718096),
-                    ),
-                  ),
-                ],
-              ),
+        final isGestor = user.isGestor;
+        final schoolId = user.escolaId;
+
+        return Scaffold(
+          backgroundColor: const Color(0xFFF8FAFC),
+          appBar: AppBar(
+            title: const Text(
+              "Perfil",
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
             ),
-          );
-        }
-
-        final userData = snapshot.data!.data()!;
-        final tipoPerfil = userData['role'] ?? 'responsavel';
-        final schoolId = userData['escolaId'];
-
-        return MainScaffold(
-          currentIndex: 4,
+            elevation: 0,
+            backgroundColor: Colors.white,
+            centerTitle: false,
+          ),
           body: SingleChildScrollView(
             padding: const EdgeInsets.all(20.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _buildProfileHeader(userData: userData),
+                _buildProfileHeader(context, user),
                 const SizedBox(height: 24),
-                _buildInfoCard(userData),
-                const SizedBox(height: 20),
+                _buildInfoCard(context, user),
+                const SizedBox(height: 24),
 
                 // Botão Editar Perfil
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const ProfileEditPage()),
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF00A74F),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    icon: const Icon(Icons.edit_outlined, size: 20),
-                    label: const Text(
-                      "Editar Perfil",
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                FilledButton.icon(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const ProfileEditPage()),
+                    );
+                  },
+                  icon: const Icon(Icons.edit_outlined, size: 20),
+                  label: const Text("Editar Perfil"),
+                ),
+
+                const SizedBox(height: 12),
+
+                // Botão Sair da Conta
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    await ConfirmDialog.show(
+                      context,
+                      title: "Confirmar Saída",
+                      message: "Deseja realmente sair da sua conta?",
+                      confirmLabel: "Sair",
+                      isDestructive: true,
+                      onConfirm: () async {
+                        await FirebaseAuth.instance.signOut();
+                      },
+                    );
+                  },
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Theme.of(context).colorScheme.error,
+                    side: BorderSide(color: Theme.of(context).colorScheme.error, width: 1.5),
                   ),
+                  icon: const Icon(Icons.exit_to_app, size: 20),
+                  label: const Text("Sair da Conta"),
                 ),
 
                 const SizedBox(height: 24),
 
                 // Gestão → Gerenciar Escola
-                if (tipoPerfil == 'gestao' && schoolId != null)
+                if (isGestor && schoolId != null)
                   _buildManageSchoolCard(context, schoolId),
 
                 // Responsável → Listar alunos
-                if (tipoPerfil == 'responsavel' && schoolId != null)
+                if (!isGestor && schoolId != null)
                   Builder(
                     builder: (context) {
-                      final cpf = userData['cpf'];
-                      if (cpf == null || cpf.toString().isEmpty) {
+                      final cpf = user.cpf;
+                      if (cpf.isEmpty) {
                         return Container(
                           padding: const EdgeInsets.all(16),
-                          margin: const EdgeInsets.only(top: 16),
                           decoration: BoxDecoration(
-                            color: Colors.orange.shade50,
+                            color: AppColors.warningLight,
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.orange.shade200),
+                            border: Border.all(color: AppColors.warning),
                           ),
                           child: Row(
                             children: [
-                              Icon(Icons.warning_amber, color: Colors.orange.shade600),
+                              const Icon(Icons.warning_amber, color: AppColors.warningDark),
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Text(
                                   "CPF não cadastrado. Entre em contato com a escola.",
                                   style: TextStyle(
-                                    color: Colors.orange.shade800,
+                                    color: AppColors.warningDark,
                                     fontSize: 14,
+                                    fontWeight: FontWeight.w500,
                                   ),
                                 ),
                               ),
@@ -152,51 +134,13 @@ class ProfilePage extends StatelessWidget {
                         stream: studentService.getStudentsForResponsibleByCpf(schoolId, cpf),
                         builder: (context, studentSnapshot) {
                           if (studentSnapshot.connectionState == ConnectionState.waiting) {
-                            return const Padding(
-                              padding: EdgeInsets.all(24.0),
-                              child: Center(
-                                child: CircularProgressIndicator(
-                                  valueColor: AlwaysStoppedAnimation<Color>(Color(
-                                      0xFF00A74F)),
-                                ),
-                              ),
-                            );
+                            return AppLoadingSkeleton.list(itemCount: 2);
                           }
                           if (!studentSnapshot.hasData || studentSnapshot.data!.docs.isEmpty) {
-                            return Container(
-                              padding: const EdgeInsets.all(24),
-                              margin: const EdgeInsets.only(top: 16),
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade50,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Column(
-                                children: [
-                                  Icon(
-                                    Icons.school_outlined,
-                                    size: 48,
-                                    color: Colors.grey.shade400,
-                                  ),
-                                  const SizedBox(height: 12),
-                                  const Text(
-                                    'Nenhum aluno vinculado',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w500,
-                                      color: Color(0xFF718096),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  const Text(
-                                    'Entre em contato com a escola para vincular alunos',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      color: Color(0xFFA0AEC0),
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                            return const AppEmptyState(
+                              icon: Icons.school_outlined,
+                              title: 'Nenhum aluno vinculado',
+                              description: 'Entre em contato com a escola para vincular alunos',
                             );
                           }
                           final students = studentSnapshot.data!.docs;
@@ -210,6 +154,13 @@ class ProfilePage extends StatelessWidget {
           ),
         );
       },
+      loading: () => Scaffold(
+        backgroundColor: const Color(0xFFF8FAFC),
+        body: AppLoadingSkeleton.list(itemCount: 3),
+      ),
+      error: (err, stack) => Scaffold(
+        body: Center(child: Text("Erro ao carregar perfil: $err")),
+      ),
     );
   }
 
@@ -219,9 +170,10 @@ class ProfilePage extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
+            color: Colors.grey.withValues(alpha: 0.03),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -233,12 +185,12 @@ class ProfilePage extends StatelessWidget {
           width: 50,
           height: 50,
           decoration: BoxDecoration(
-            color: const Color(0xFF00A74F).withOpacity(0.1),
+            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
             shape: BoxShape.circle,
           ),
           child: Icon(
             Icons.school,
-            color: const Color(0xFF00A74F),
+            color: Theme.of(context).colorScheme.primary,
             size: 24,
           ),
         ),
@@ -261,13 +213,13 @@ class ProfilePage extends StatelessWidget {
           width: 40,
           height: 40,
           decoration: BoxDecoration(
-            color: const Color(0xFF00A74F).withOpacity(0.1),
+            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
             shape: BoxShape.circle,
           ),
           child: Icon(
             Icons.arrow_forward,
             size: 20,
-            color: const Color(0xFF00A74F),
+            color: Theme.of(context).colorScheme.primary,
           ),
         ),
         onTap: () {
@@ -287,7 +239,7 @@ class ProfilePage extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Padding(
-          padding: EdgeInsets.only(bottom: 16),
+          padding: EdgeInsets.only(bottom: 16, top: 8),
           child: Text(
             'Alunos Vinculados',
             style: TextStyle(
@@ -303,12 +255,11 @@ class ProfilePage extends StatelessWidget {
           itemCount: students.length,
           itemBuilder: (context, index) {
             final studentDoc = students[index];
-            final studentData = studentDoc.data();
-            final dataNascimento = studentData['dataNascimento'] as Timestamp?;
+            final student = StudentModel.fromFirestore(studentDoc);
+            final nascimento = student.dataNascimento;
             String idade = '';
 
-            if (dataNascimento != null) {
-              final nascimento = dataNascimento.toDate();
+            if (nascimento != null) {
               final hoje = DateTime.now();
               int anos = hoje.year - nascimento.year;
               if (hoje.month < nascimento.month ||
@@ -323,9 +274,10 @@ class ProfilePage extends StatelessWidget {
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.grey.withOpacity(0.1),
+                    color: Colors.grey.withValues(alpha: 0.03),
                     blurRadius: 6,
                     offset: const Offset(0, 3),
                   ),
@@ -333,28 +285,13 @@ class ProfilePage extends StatelessWidget {
               ),
               child: ListTile(
                 contentPadding: const EdgeInsets.all(16),
-                leading: Container(
-                  width: 50,
-                  height: 50,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF00A74F).withOpacity(0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Center(
-                    child: Text(
-                      studentData['nome'] != null && studentData['nome'].isNotEmpty
-                          ? studentData['nome'][0].toUpperCase()
-                          : "?",
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF00A74F),
-                      ),
-                    ),
-                  ),
+                leading: AppAvatar(
+                  name: student.nome,
+                  radius: 25,
+                  heroTag: 'student_avatar_${student.id}',
                 ),
                 title: Text(
-                  studentData['nome'] ?? 'Nome não informado',
+                  student.nome.isNotEmpty ? student.nome : 'Nome não informado',
                   style: const TextStyle(
                     fontWeight: FontWeight.w600,
                     color: Color(0xFF2D3748),
@@ -364,9 +301,9 @@ class ProfilePage extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SizedBox(height: 4),
-                    if (dataNascimento != null)
+                    if (nascimento != null)
                       Text(
-                        'Nascimento: ${DateFormat('dd/MM/yyyy').format(dataNascimento.toDate())}$idade',
+                        'Nascimento: ${DateFormat('dd/MM/yyyy').format(nascimento)}$idade',
                         style: const TextStyle(
                           color: Color(0xFF718096),
                           fontSize: 12,
@@ -378,14 +315,14 @@ class ProfilePage extends StatelessWidget {
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF00A74F).withOpacity(0.1),
+                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
                     shape: BoxShape.circle,
                   ),
                   child: IconButton(
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.arrow_forward,
                       size: 18,
-                      color: Color(0xFF00A74F),
+                      color: Theme.of(context).colorScheme.primary,
                     ),
                     onPressed: () {
                       Navigator.push(
@@ -407,43 +344,28 @@ class ProfilePage extends StatelessWidget {
     );
   }
 
-  Widget _buildProfileHeader({required Map<String, dynamic> userData}) {
-    final nome = userData['nome'] ?? 'Usuário';
-    final role = userData['role'] ?? 'responsavel';
-    final isGestor = role == 'gestao';
+  Widget _buildProfileHeader(BuildContext context, user) {
+    final nome = user.nome;
+    final roleLabel = user.roleLabel;
 
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF00A74F), Color(0xFF03E572)],
+        gradient: LinearGradient(
+          colors: [Theme.of(context).colorScheme.primary, const Color(0xFF22C55E)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.blue.shade300.withOpacity(0.3),
-            blurRadius: 15,
-            offset: const Offset(0, 5),
-          ),
-        ],
+        boxShadow: AppShadows.colored(Theme.of(context).colorScheme.primary, opacity: 0.25),
       ),
       child: Row(
         children: [
-          Container(
-            width: 80,
-            height: 80,
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.white.withOpacity(0.3), width: 2),
-            ),
-            child: Icon(
-              Icons.person,
-              size: 40,
-              color: Colors.white.withOpacity(0.9),
-            ),
+          AppAvatar(
+            name: nome,
+            radius: 40,
+            backgroundColor: Colors.white.withValues(alpha: 0.2),
+            textColor: Colors.white,
           ),
           const SizedBox(width: 20),
           Expanded(
@@ -464,11 +386,11 @@ class ProfilePage extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
+                    color: Colors.white.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Text(
-                    isGestor ? 'Gestão Escolar' : 'Responsável',
+                    roleLabel,
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 12,
@@ -484,14 +406,15 @@ class ProfilePage extends StatelessWidget {
     );
   }
 
-  Widget _buildInfoCard(Map<String, dynamic> userData) {
+  Widget _buildInfoCard(BuildContext context, user) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
+            color: Colors.grey.withValues(alpha: 0.03),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -511,25 +434,25 @@ class ProfilePage extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            _buildInfoRow(Icons.person_outline, "Nome", userData['nome'] ?? 'Não informado'),
+            _buildInfoRow(context, Icons.person_outline, "Nome", user.nome),
             const SizedBox(height: 12),
-            _buildInfoRow(Icons.credit_card_outlined, "CPF", userData['cpf']?.toString() ?? 'Não informado'),
+            _buildInfoRow(context, Icons.credit_card_outlined, "CPF", user.cpf.isNotEmpty ? user.cpf : 'Não informado'),
             const SizedBox(height: 12),
-            _buildInfoRow(Icons.email_outlined, "E-mail", userData['email'] ?? 'Não informado'),
+            _buildInfoRow(context, Icons.email_outlined, "E-mail", user.email),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildInfoRow(IconData icon, String label, String value) {
+  Widget _buildInfoRow(BuildContext context, IconData icon, String label, String value) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Icon(
           icon,
           size: 20,
-          color: const Color(0xFF00A74F),
+          color: Theme.of(context).colorScheme.primary,
         ),
         const SizedBox(width: 12),
         Expanded(

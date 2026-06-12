@@ -2,6 +2,7 @@ import 'package:FamiliaEscolaApp/pages/dashboard_page.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import '../core/constants/app_colors.dart';
 import '../services/school_service.dart';
 import 'edit_school_page.dart';
 
@@ -40,7 +41,7 @@ class SchoolDetailsPage extends StatelessWidget {
                 color: Colors.white,
               ),
             ),
-            backgroundColor: const Color(0xFF00A74F),
+            backgroundColor: AppColors.primary600,
             foregroundColor: Colors.white,
             elevation: 0,
             actions: isGestor
@@ -97,7 +98,7 @@ class SchoolDetailsPage extends StatelessWidget {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(
                   child: CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00A74F)),
+                    valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary600),
                   ),
                 );
               }
@@ -141,13 +142,13 @@ class SchoolDetailsPage extends StatelessWidget {
                             width: 60,
                             height: 60,
                             decoration: BoxDecoration(
-                              color: const Color(0xFF00A74F).withOpacity(0.1),
+                              color: AppColors.primary600.withValues(alpha: 0.1),
                               shape: BoxShape.circle,
                             ),
                             child: const Icon(
                               Icons.school,
                               size: 30,
-                              color: Color(0xFF00A74F),
+                              color: AppColors.primary600,
                             ),
                           ),
                           const SizedBox(width: 16),
@@ -259,7 +260,7 @@ class SchoolDetailsPage extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
+            color: Colors.grey.withValues(alpha: 0.1),
             blurRadius: 6,
             offset: const Offset(0, 2),
           ),
@@ -270,10 +271,10 @@ class SchoolDetailsPage extends StatelessWidget {
           width: 40,
           height: 40,
           decoration: BoxDecoration(
-            color: const Color(0xFF00A74F).withOpacity(0.1),
+            color: AppColors.primary600.withValues(alpha: 0.1),
             shape: BoxShape.circle,
           ),
-          child: Icon(icon, size: 20, color: const Color(0xFF00A74F)),
+          child: Icon(icon, size: 20, color: AppColors.primary600),
         ),
         title: Text(
           title,

@@ -5,6 +5,7 @@ import 'package:flutter_speed_dial/flutter_speed_dial.dart';
 import 'package:intl/intl.dart';
 
 import 'adicionar_registro_aluno_page.dart';
+import '../shared/widgets/animated_fab.dart';
 
 class AlunoDetalhesPage extends StatefulWidget {
   final String alunoId;
@@ -182,45 +183,47 @@ class _AlunoDetalhesPageState extends State<AlunoDetalhesPage>
               },
             ),
       floatingActionButton: _ehGestor
-          ? SpeedDial(
-              icon: Icons.more_vert,
-              activeIcon: Icons.close,
-              backgroundColor: Colors.blue.shade700,
-              children: [
-                SpeedDialChild(
-                  child: const Icon(Icons.add_comment),
-                  label: "Adicionar Registro",
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => AdicionarRegistroAlunoPage(
-                          alunoId: widget.alunoId,
+          ? AnimatedFAB(
+              child: SpeedDial(
+                icon: Icons.more_vert,
+                activeIcon: Icons.close,
+                backgroundColor: Colors.blue.shade700,
+                children: [
+                  SpeedDialChild(
+                    child: const Icon(Icons.add_comment),
+                    label: "Adicionar Registro",
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => AdicionarRegistroAlunoPage(
+                            alunoId: widget.alunoId,
+                          ),
                         ),
-                      ),
-                    );
-                  },
-                ),
-                SpeedDialChild(
-                  child: const Icon(Icons.edit),
-                  label: "Editar Aluno",
-                  onTap: () async {
-                    final alunoDoc = await FirebaseFirestore.instance
-                        .collection("students")
-                        .doc(widget.alunoId)
-                        .get();
-                    if (alunoDoc.exists && mounted) {
-                      _editarAluno(context, widget.alunoId,
-                          alunoDoc.data() as Map<String, dynamic>);
-                    }
-                  },
-                ),
-                SpeedDialChild(
-                  child: const Icon(Icons.delete, color: Colors.red),
-                  label: "Excluir Aluno",
-                  onTap: () => _excluirAluno(context, widget.alunoId),
-                ),
-              ],
+                      );
+                    },
+                  ),
+                  SpeedDialChild(
+                    child: const Icon(Icons.edit),
+                    label: "Editar Aluno",
+                    onTap: () async {
+                      final alunoDoc = await FirebaseFirestore.instance
+                          .collection("students")
+                          .doc(widget.alunoId)
+                          .get();
+                      if (alunoDoc.exists && mounted) {
+                        _editarAluno(context, widget.alunoId,
+                            alunoDoc.data() as Map<String, dynamic>);
+                      }
+                    },
+                  ),
+                  SpeedDialChild(
+                    child: const Icon(Icons.delete, color: Colors.red),
+                    label: "Excluir Aluno",
+                    onTap: () => _excluirAluno(context, widget.alunoId),
+                  ),
+                ],
+              ),
             )
           : null,
     );
@@ -241,16 +244,28 @@ class _AlunoDetalhesPageState extends State<AlunoDetalhesPage>
       nascimentoStr = nascimento;
     }
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Center(
-          child: CircleAvatar(
-            radius: 50,
-            backgroundColor: Colors.blue.shade200,
-            child: const Icon(Icons.person, size: 60, color: Colors.white),
+    return RefreshIndicator(
+      onRefresh: () async {
+        await Future.delayed(const Duration(milliseconds: 800));
+        if (mounted) setState(() {});
+      },
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        children: [
+          Center(
+            child: Hero(
+              tag: 'student_avatar_${widget.alunoId}',
+              child: Material(
+                type: MaterialType.transparency,
+                child: CircleAvatar(
+                  radius: 50,
+                  backgroundColor: Colors.blue.shade200,
+                  child: const Icon(Icons.person, size: 60, color: Colors.white),
+                ),
+              ),
+            ),
           ),
-        ),
         const SizedBox(height: 16),
         Text(
           aluno['nome'] ?? '---',
@@ -303,7 +318,8 @@ class _AlunoDetalhesPageState extends State<AlunoDetalhesPage>
           )
         else
           _infoCard(Icons.group, "Turma", "Não matriculado"),
-      ],
+        ],
+      ),
     );
   }
 
@@ -337,62 +353,67 @@ class _AlunoDetalhesPageState extends State<AlunoDetalhesPage>
         }
 
         final registros = snapshot.data!.docs;
+        return RefreshIndicator(
+          onRefresh: () async {
+            await Future.delayed(const Duration(milliseconds: 800));
+          },
+          child: ListView.builder(
+            physics: const AlwaysScrollableScrollPhysics(),
+            itemCount: registros.length,
+            itemBuilder: (context, index) {
+              final doc = registros[index];
+              final data = doc.data() as Map<String, dynamic>;
+              final status = data['status'];
+              final bool isPendente = status == 'Pendente';
 
-        return ListView.builder(
-          itemCount: registros.length,
-          itemBuilder: (context, index) {
-            final doc = registros[index];
-            final data = doc.data() as Map<String, dynamic>;
-            final status = data['status'];
-            final bool isPendente = status == 'Pendente';
-
-            return Card(
-              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: ListTile(
-                title: Text(data['titulo'] ?? 'Sem Título'),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      data['descricao'] ?? '',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (tipo == 'Ocorrência' && status != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8.0),
-                        child: Chip(
-                          label: Text(status,
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.bold)),
-                          backgroundColor: isPendente
-                              ? Colors.orange.shade100
-                              : Colors.green.shade100,
-                          avatar: Icon(
-                            isPendente
-                                ? Icons.hourglass_top
-                                : Icons.check_circle,
-                            color: isPendente
-                                ? Colors.orange.shade800
-                                : Colors.green.shade800,
+              return Card(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: ListTile(
+                  title: Text(data['titulo'] ?? 'Sem Título'),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        data['descricao'] ?? '',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (tipo == 'Ocorrência' && status != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8.0),
+                          child: Chip(
+                            label: Text(status,
+                                style:
+                                    const TextStyle(fontWeight: FontWeight.bold)),
+                            backgroundColor: isPendente
+                                ? Colors.orange.shade100
+                                : Colors.green.shade100,
+                            avatar: Icon(
+                              isPendente
+                                  ? Icons.hourglass_top
+                                  : Icons.check_circle,
+                              color: isPendente
+                                  ? Colors.orange.shade800
+                                  : Colors.green.shade800,
+                            ),
                           ),
                         ),
-                      ),
-                  ],
+                    ],
+                  ),
+                  trailing: _ehGestor && isPendente && tipo == 'Ocorrência'
+                      ? ElevatedButton(
+                          onPressed: () =>
+                              _alterarStatusOcorrencia(doc.id, 'Resolvido'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                          ),
+                          child: const Text('Resolver'),
+                        )
+                      : null,
                 ),
-                trailing: _ehGestor && isPendente && tipo == 'Ocorrência'
-                    ? ElevatedButton(
-                        onPressed: () =>
-                            _alterarStatusOcorrencia(doc.id, 'Resolvido'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
-                        ),
-                        child: const Text('Resolver'),
-                      )
-                    : null,
-              ),
-            );
-          },
+              );
+            },
+          ),
         );
       },
     );

@@ -10,5 +10,8 @@ void main() {
 
     // Verifique se aparece algum texto esperado da sua SplashPage ou inicial
     expect(find.byType(MaterialApp), findsOneWidget);
+
+    // Avança o timer de 2 segundos para evitar exceção de "Timer pending"
+    await tester.pump(const Duration(seconds: 2));
   });
 }

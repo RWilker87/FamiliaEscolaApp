@@ -1,341 +1,277 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 
-class DashboardPage extends StatelessWidget {
+import '../shared/providers/user_provider.dart';
+
+class DashboardPage extends ConsumerWidget {
   final String escolaId;
 
   const DashboardPage({super.key, required this.escolaId});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final userModelAsync = ref.watch(userModelProvider);
+
     return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
         title: const Text(
           "Dashboard da Escola",
-          style: TextStyle(
-            fontWeight: FontWeight.w600,
-            fontSize: 20,
-            color: Colors.white,
-          ),
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
         ),
-        backgroundColor: const Color(0xFF00A74F),
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF2D3748),
         elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
+        centerTitle: false,
+        iconTheme: IconThemeData(color: Theme.of(context).colorScheme.primary),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header
-            Container(
-              padding: const EdgeInsets.only(bottom: 24),
-              child: Row(
-                children: [
-                  Container(
-                    width: 50,
-                    height: 50,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.analytics, size: 26),
-                  ),
-                  const SizedBox(width: 16),
-                  const Expanded(
-                    child: Text(
-                      "Visão Geral da Escola",
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF2D3748),
+      body: userModelAsync.when(
+        data: (user) {
+          if (user == null) {
+            return const Center(child: Text("Usuário não encontrado"));
+          }
+
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header
+                Container(
+                  padding: const EdgeInsets.only(bottom: 20),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.analytics_outlined,
+                          size: 24,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
                       ),
-                    ),
+                      const SizedBox(width: 16),
+                      const Expanded(
+                        child: Text(
+                          "Visão Geral da Escola",
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF2D3748),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+
+                const SizedBox(height: 8),
+
+                // Seção: Indicadores Gerais
+                _buildSectionTitle(context, Icons.bar_chart_outlined, "Indicadores Gerais"),
+                const SizedBox(height: 16),
+                _buildRealtimeResumoGrid(user.uid),
+
+                const SizedBox(height: 28),
+                const Divider(height: 1),
+                const SizedBox(height: 28),
+
+                // Seção: Alunos por Turma
+                _buildSectionTitle(context, Icons.pie_chart_outline, "Distribuição de Alunos por Turma"),
+                const SizedBox(height: 16),
+                _buildRealtimeAlunosPorTurma(),
+
+                const SizedBox(height: 28),
+                const Divider(height: 1),
+                const SizedBox(height: 28),
+
+                // Seção: Avisos Publicados
+                _buildSectionTitle(context, Icons.campaign_outlined, "Avisos Publicados por Mês"),
+                const SizedBox(height: 16),
+                _buildRealtimeAvisosPorMes(),
+
+                const SizedBox(height: 28),
+                const Divider(height: 1),
+                const SizedBox(height: 28),
+
+                // Seção: Atividade Fórum
+                _buildSectionTitle(context, Icons.forum_outlined, "Atividade no Fórum"),
+                const SizedBox(height: 16),
+                _buildRealtimeForumAtividade(),
+
+                const SizedBox(height: 40),
+              ],
             ),
-
-            // Cards de Resumo
-            const Text(
-              "📊 Indicadores Gerais",
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF2D3748),
-              ),
-            ),
-            const SizedBox(height: 16),
-            _buildResumoCards(),
-
-            const SizedBox(height: 32),
-            const Divider(height: 1, color: Color(0xFFE2E8F0)),
-            const SizedBox(height: 32),
-
-            // Gráfico de Alunos por Turma
-            const Text(
-              "👩‍🎓 Distribuição de Alunos por Turma",
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF2D3748),
-              ),
-            ),
-            const SizedBox(height: 16),
-            _buildAlunosPorTurma(),
-
-            const SizedBox(height: 32),
-            const Divider(height: 1, color: Color(0xFFE2E8F0)),
-            const SizedBox(height: 32),
-
-            // Gráfico de Avisos por Mês
-            const Text(
-              "📢 Avisos Publicados por Mês",
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF2D3748),
-              ),
-            ),
-            const SizedBox(height: 16),
-            _buildAvisosPorMes(),
-
-            const SizedBox(height: 32),
-            const Divider(height: 1, color: Color(0xFFE2E8F0)),
-            const SizedBox(height: 32),
-
-            // Atividade no Fórum
-            const Text(
-              "💬 Atividade no Fórum",
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF2D3748),
-              ),
-            ),
-            const SizedBox(height: 16),
-            _buildForumAtividade(),
-
-            const SizedBox(height: 40),
-          ],
-        ),
+          );
+        },
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (err, stack) => Center(child: Text("Erro ao carregar dados: $err")),
       ),
     );
   }
 
-  // ---------- CARDS RESUMO ----------
-  Widget _buildResumoCards() {
-    return FutureBuilder<Map<String, int>>(
-      future: _fetchCounts(),
+  Widget _buildSectionTitle(BuildContext context, IconData icon, String text) {
+    return Row(
+      children: [
+        Icon(icon, size: 20, color: Theme.of(context).colorScheme.primary),
+        const SizedBox(width: 8),
+        Text(
+          text,
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF2D3748),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Grid de Indicadores em tempo real utilizando múltiplos StreamBuilders reativos
+  Widget _buildRealtimeResumoGrid(String uid) {
+    final db = FirebaseFirestore.instance;
+
+    return GridView.count(
+      crossAxisCount: 2,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisSpacing: 16,
+      mainAxisSpacing: 16,
+      childAspectRatio: 1.35,
+      children: [
+        _buildStreamCard(
+          title: "Alunos",
+          stream: db.collection('students').where('escolaId', isEqualTo: escolaId).snapshots(),
+          icon: Icons.people_outline,
+          color: const Color(0xFF16A34A),
+        ),
+        _buildStreamCard(
+          title: "Turmas",
+          stream: db.collection('escolas').doc(escolaId).collection('turmas').snapshots(),
+          icon: Icons.class_outlined,
+          color: const Color(0xFF3B82F6),
+        ),
+        _buildStreamCard(
+          title: "Avisos",
+          stream: db.collection('avisos').where('escolaId', isEqualTo: escolaId).snapshots(),
+          icon: Icons.campaign_outlined,
+          color: const Color(0xFFF59E0B),
+        ),
+        _buildStreamCard(
+          title: "Conversas",
+          stream: db.collection('escolas').doc(escolaId).collection('conversas').where('participantes', arrayContains: uid).snapshots(),
+          icon: Icons.chat_bubble_outline,
+          color: const Color(0xFF8B5CF6),
+        ),
+        _buildStreamCard(
+          title: "Tópicos",
+          stream: db.collection('escolas').doc(escolaId).collection('forum').snapshots(),
+          icon: Icons.forum_outlined,
+          color: const Color(0xFF14B8A6),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStreamCard({
+    required String title,
+    required Stream<QuerySnapshot> stream,
+    required IconData icon,
+    required Color color,
+  }) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: stream,
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00A74F)),
-            ),
-          );
-        }
+        final count = snapshot.hasData ? snapshot.data!.docs.length : 0;
+        final isLoading = snapshot.connectionState == ConnectionState.waiting;
 
-        if (snapshot.hasError) {
-          return Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.red.shade50,
-              borderRadius: BorderRadius.circular(12),
+        return Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.grey.withValues(alpha: 0.03),
+                blurRadius: 6,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(icon, size: 18, color: color),
+                ),
+                const SizedBox(height: 8),
+                isLoading
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Text(
+                        count.toString(),
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: color,
+                        ),
+                      ),
+                const SizedBox(height: 2),
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF64748B),
+                  ),
+                ),
+              ],
             ),
-            child: const Text(
-              "Erro ao carregar dados",
-              style: TextStyle(color: Colors.red),
-            ),
-          );
-        }
-
-        /*if (snapshot.hasError) {
-          return Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.red.shade50,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              "Erro: ${snapshot.error}",
-              style: const TextStyle(color: Colors.red),
-            ),
-          );
-        }*/
-
-        final data = snapshot.data ?? {};
-        return GridView.count(
-          crossAxisCount: 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisSpacing: 16,
-          mainAxisSpacing: 16,
-          childAspectRatio: 1.2,
-          children: [
-            _buildCard(
-              "Alunos",
-              data['Alunos'] ?? 0,
-              Icons.people,
-              const Color(0xFF00A74F),
-            ),
-            _buildCard(
-              "Turmas",
-              data['Turmas'] ?? 0,
-              Icons.class_,
-              const Color(0xFF4299E1),
-            ),
-            _buildCard(
-              "Avisos",
-              data['Avisos'] ?? 0,
-              Icons.announcement,
-              const Color(0xFFED8936),
-            ),
-            _buildCard(
-              "Conversas",
-              data['Conversas'] ?? 0,
-              Icons.chat,
-              const Color(0xFF9F7AEA),
-            ),
-            _buildCard(
-              "Tópicos",
-              data['Tópicos Fórum'] ?? 0,
-              Icons.forum,
-              const Color(0xFF48BB78),
-            ),
-          ],
+          ),
         );
       },
     );
   }
 
-  Future<Map<String, int>> _fetchCounts() async {
-    final db = FirebaseFirestore.instance;
-    final userDoc = await db.collection("users").doc(FirebaseAuth.instance.currentUser!.uid).get();
-    final userData = userDoc.data() ?? {};
-    final role = userData["role"];
-    final escola = userData["escolaId"];
-
-    // Se não tiver escola, não retorna nada
-    if (escola == null) return {};
-
-    final Map<String, int> result = {};
-
-    if (role == "gestao") {
-      final alunos = await db.collection('students').where('escolaId', isEqualTo: escola).get();
-      final turmas = await db.collection('escolas').doc(escola).collection('turmas').get();
-      final avisos = await db.collection('avisos').where('escolaId', isEqualTo: escola).get();
-      final forum = await db.collection('escolas').doc(escola).collection('forum').get();
-
-      // 🔹 Conversas em que o gestor participa
-      final conversas = await db
-          .collection('escolas')
-          .doc(escola)
-          .collection('conversas')
-          .where('participantes', arrayContains: FirebaseAuth.instance.currentUser!.uid)
-          .get();
-
-      result.addAll({
-        'Alunos': alunos.size,
-        'Turmas': turmas.size,
-        'Avisos': avisos.size,
-        'Tópicos Fórum': forum.size,
-        'Conversas': conversas.size, // ✅ só as conversas que ele participa
-      });
-    }
-
-    return result;
-  }
-
-  Widget _buildCard(String title, int value, IconData icon, Color color) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            blurRadius: 6,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, size: 20, color: color),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              value.toString(),
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: color,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF718096),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ---------- GRÁFICO DE PIZZA: Alunos por Turma ----------
-  Widget _buildAlunosPorTurma() {
-    return FutureBuilder<QuerySnapshot>(
-      future: FirebaseFirestore.instance
+  // Pizza Chart: Alunos por turma em tempo real
+  Widget _buildRealtimeAlunosPorTurma() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
           .collection("students")
           .where("escolaId", isEqualTo: escolaId)
-          .get(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00A74F)),
-            ),
+          .snapshots(),
+      builder: (context, studentSnapshot) {
+        if (studentSnapshot.connectionState == ConnectionState.waiting) {
+          return const SizedBox(
+            height: 200,
+            child: Center(child: CircularProgressIndicator()),
           );
         }
 
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade50,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Center(
-              child: Text(
-                "Nenhum aluno cadastrado",
-                style: TextStyle(color: Color(0xFF718096)),
-              ),
-            ),
-          );
+        if (!studentSnapshot.hasData || studentSnapshot.data!.docs.isEmpty) {
+          return _buildEmptyChartPlaceholder("Nenhum aluno cadastrado");
         }
 
-        final alunos = snapshot.data!.docs;
+        final alunos = studentSnapshot.data!.docs;
         final Map<String, int> porTurma = {};
         for (var doc in alunos) {
           final data = doc.data() as Map<String, dynamic>;
@@ -343,15 +279,18 @@ class DashboardPage extends StatelessWidget {
           porTurma[turmaId] = (porTurma[turmaId] ?? 0) + 1;
         }
 
-        return FutureBuilder<QuerySnapshot>(
-          future: FirebaseFirestore.instance
+        return StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance
               .collection("escolas")
               .doc(escolaId)
               .collection("turmas")
-              .get(),
+              .snapshots(),
           builder: (context, turmaSnapshot) {
             if (!turmaSnapshot.hasData) {
-              return const Center(child: CircularProgressIndicator());
+              return const SizedBox(
+                height: 200,
+                child: Center(child: CircularProgressIndicator()),
+              );
             }
 
             final turmasDocs = turmaSnapshot.data!.docs;
@@ -361,12 +300,12 @@ class DashboardPage extends StatelessWidget {
             };
 
             final colors = [
-              const Color(0xFF00A74F),
-              const Color(0xFF4299E1),
-              const Color(0xFFED8936),
-              const Color(0xFF9F7AEA),
-              const Color(0xFF48BB78),
-              const Color(0xFFF56565),
+              const Color(0xFF16A34A),
+              const Color(0xFF3B82F6),
+              const Color(0xFFF59E0B),
+              const Color(0xFF8B5CF6),
+              const Color(0xFF14B8A6),
+              const Color(0xFFEF4444),
             ];
 
             final sections = porTurma.entries.map((entry) {
@@ -379,31 +318,25 @@ class DashboardPage extends StatelessWidget {
                 value: entry.value.toDouble(),
                 title: "$nome\n(${entry.value})",
                 color: colors[index % colors.length],
-                radius: 60,
+                radius: 55,
                 titleStyle: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
                   color: Colors.white,
                 ),
               );
             }).toList();
 
             return Container(
-              height: 260,
+              height: 240,
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.grey.withOpacity(0.1),
-                    blurRadius: 6,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
+                border: Border.all(color: const Color(0xFFE2E8F0)),
               ),
               child: PieChart(
-                PieChartData(sections: sections, centerSpaceRadius: 40),
+                PieChartData(sections: sections, centerSpaceRadius: 35),
               ),
             );
           },
@@ -412,36 +345,23 @@ class DashboardPage extends StatelessWidget {
     );
   }
 
-  // ---------- GRÁFICO DE BARRAS: Avisos por mês ----------
-  Widget _buildAvisosPorMes() {
-    return FutureBuilder<QuerySnapshot>(
-      future: FirebaseFirestore.instance
+  // Bar Chart: Avisos por mês em tempo real
+  Widget _buildRealtimeAvisosPorMes() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
           .collection("avisos")
           .where("escolaId", isEqualTo: escolaId)
-          .get(),
+          .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00A74F)),
-            ),
+          return const SizedBox(
+            height: 200,
+            child: Center(child: CircularProgressIndicator()),
           );
         }
 
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade50,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Center(
-              child: Text(
-                "Nenhum aviso publicado",
-                style: TextStyle(color: Color(0xFF718096)),
-              ),
-            ),
-          );
+          return _buildEmptyChartPlaceholder("Nenhum aviso publicado");
         }
 
         final avisos = snapshot.data!.docs;
@@ -463,29 +383,21 @@ class DashboardPage extends StatelessWidget {
             barRods: [
               BarChartRodData(
                 toY: entry.value.toDouble(),
-                color: const Color(0xFF00A74F),
-                width: 22,
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(6),
-                ),
+                color: Theme.of(context).colorScheme.primary,
+                width: 20,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
               ),
             ],
           );
         }).toList();
 
         return Container(
-          height: 260,
+          height: 240,
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.grey.withOpacity(0.1),
-                blurRadius: 6,
-                offset: const Offset(0, 3),
-              ),
-            ],
+            border: Border.all(color: const Color(0xFFE2E8F0)),
           ),
           child: BarChart(
             BarChartData(
@@ -494,7 +406,7 @@ class DashboardPage extends StatelessWidget {
                 drawVerticalLine: false,
                 horizontalInterval: 1,
                 getDrawingHorizontalLine: (value) =>
-                    FlLine(color: Colors.grey.withOpacity(0.2), strokeWidth: 1),
+                    FlLine(color: Colors.grey.withValues(alpha: 0.1), strokeWidth: 1),
               ),
               titlesData: FlTitlesData(
                 leftTitles: AxisTitles(
@@ -506,22 +418,15 @@ class DashboardPage extends StatelessWidget {
                       if (value % 1 == 0) {
                         return Text(
                           value.toInt().toString(),
-                          style: const TextStyle(
-                            fontSize: 10,
-                            color: Color(0xFF718096),
-                          ),
+                          style: const TextStyle(fontSize: 10, color: Color(0xFF718096)),
                         );
                       }
                       return const SizedBox.shrink();
                     },
                   ),
                 ),
-                rightTitles: AxisTitles(
-                  sideTitles: SideTitles(showTitles: false),
-                ),
-                topTitles: AxisTitles(
-                  sideTitles: SideTitles(showTitles: false),
-                ),
+                rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                 bottomTitles: AxisTitles(
                   sideTitles: SideTitles(
                     showTitles: true,
@@ -529,17 +434,12 @@ class DashboardPage extends StatelessWidget {
                       final index = value.toInt();
                       if (index >= 0 && index < porMes.keys.length) {
                         final mes = porMes.keys.elementAt(index);
-                        final formatado = DateFormat(
-                          "MMM/yy",
-                        ).format(DateFormat("MM/yyyy").parse(mes));
+                        final formatado = DateFormat("MMM/yy").format(DateFormat("MM/yyyy").parse(mes));
                         return Padding(
                           padding: const EdgeInsets.only(top: 8.0),
                           child: Text(
                             formatado,
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                            ),
+                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
                           ),
                         );
                       }
@@ -549,9 +449,7 @@ class DashboardPage extends StatelessWidget {
                 ),
               ),
               barGroups: barGroups,
-              barTouchData: BarTouchData(
-                enabled: false,
-              ), // ✅ sem tooltip/retângulo
+              barTouchData: BarTouchData(enabled: true),
             ),
           ),
         );
@@ -559,37 +457,24 @@ class DashboardPage extends StatelessWidget {
     );
   }
 
-  // ---------- GRÁFICO DE LINHA: Atividade no Fórum ----------
-  Widget _buildForumAtividade() {
-    return FutureBuilder<QuerySnapshot>(
-      future: FirebaseFirestore.instance
+  // Line Chart: Atividade no fórum em tempo real
+  Widget _buildRealtimeForumAtividade() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
           .collection("escolas")
           .doc(escolaId)
           .collection("forum")
-          .get(),
+          .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00A74F)),
-            ),
+          return const SizedBox(
+            height: 200,
+            child: Center(child: CircularProgressIndicator()),
           );
         }
 
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade50,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Center(
-              child: Text(
-                "Nenhuma atividade no fórum",
-                style: TextStyle(color: Color(0xFF718096)),
-              ),
-            ),
-          );
+          return _buildEmptyChartPlaceholder("Nenhuma atividade no fórum");
         }
 
         final topicos = snapshot.data!.docs;
@@ -610,23 +495,34 @@ class DashboardPage extends StatelessWidget {
         }).toList();
 
         return Container(
-          height: 260,
+          height: 240,
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.grey.withOpacity(0.1),
-                blurRadius: 6,
-                offset: const Offset(0, 3),
-              ),
-            ],
+            border: Border.all(color: const Color(0xFFE2E8F0)),
           ),
           child: LineChart(
             LineChartData(
               gridData: FlGridData(show: true, drawVerticalLine: false),
               titlesData: FlTitlesData(
+                leftTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 28,
+                    getTitlesWidget: (value, meta) {
+                      if (value % 1 == 0) {
+                        return Text(
+                          value.toInt().toString(),
+                          style: const TextStyle(fontSize: 10, color: Color(0xFF718096)),
+                        );
+                      }
+                      return const SizedBox.shrink();
+                    },
+                  ),
+                ),
+                rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                 bottomTitles: AxisTitles(
                   sideTitles: SideTitles(
                     showTitles: true,
@@ -637,10 +533,7 @@ class DashboardPage extends StatelessWidget {
                           padding: const EdgeInsets.only(top: 8.0),
                           child: Text(
                             porDia.keys.elementAt(index),
-                            style: const TextStyle(
-                              fontSize: 10,
-                              color: Color(0xFF718096),
-                            ),
+                            style: const TextStyle(fontSize: 10, color: Color(0xFF718096)),
                           ),
                         );
                       }
@@ -654,11 +547,11 @@ class DashboardPage extends StatelessWidget {
                   spots: spots,
                   isCurved: true,
                   barWidth: 3,
-                  color: const Color(0xFF00A74F),
-                  dotData: FlDotData(show: true),
+                  color: Theme.of(context).colorScheme.primary,
+                  dotData: const FlDotData(show: true),
                   belowBarData: BarAreaData(
                     show: true,
-                    color: const Color(0xFF00A74F).withOpacity(0.1),
+                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
                   ),
                 ),
               ],
@@ -666,6 +559,30 @@ class DashboardPage extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildEmptyChartPlaceholder(String message) {
+    return Container(
+      height: 200,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.bar_chart_outlined, size: 48, color: Color(0xFFCBD5E1)),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

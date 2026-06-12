@@ -21,7 +21,7 @@ class StudentService {
     });
   }
 
-  /// 🔎 Busca alunos vinculados a um responsável pelo CPF em uma escola específica
+  /// Busca alunos vinculados a um responsável pelo CPF em uma escola específica
   /// CORREÇÃO: Agora busca na coleção raiz 'students'
   Stream<QuerySnapshot<Map<String, dynamic>>> getStudentsForResponsibleByCpf(
       String schoolId, String cpf) {

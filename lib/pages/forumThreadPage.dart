@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../core/constants/app_colors.dart';
 import 'package:intl/intl.dart';
 
 class ForumThreadPage extends StatefulWidget {
@@ -84,7 +85,7 @@ class _ForumThreadPageState extends State<ForumThreadPage> {
             color: Colors.white,
           ),
         ),
-        backgroundColor: const Color(0xFF00A74F),
+        backgroundColor: AppColors.primary600,
         foregroundColor: Colors.white,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
@@ -109,13 +110,13 @@ class _ForumThreadPageState extends State<ForumThreadPage> {
                       width: 44,
                       height: 44,
                       decoration: BoxDecoration(
-                        color: const Color(0xFF00A74F).withOpacity(0.1),
+                        color: AppColors.primary600.withValues(alpha: 0.1),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(
                         Icons.person,
                         size: 20,
-                        color: Color(0xFF00A74F),
+                        color: AppColors.primary600,
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -216,7 +217,7 @@ class _ForumThreadPageState extends State<ForumThreadPage> {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
                     child: CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00A74F)),
+                      valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary600),
                     ),
                   );
                 }
@@ -274,7 +275,7 @@ class _ForumThreadPageState extends State<ForumThreadPage> {
                         borderRadius: BorderRadius.circular(12),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.grey.withOpacity(0.1),
+                            color: Colors.grey.withValues(alpha: 0.1),
                             blurRadius: 6,
                             offset: const Offset(0, 3),
                           ),
@@ -286,13 +287,13 @@ class _ForumThreadPageState extends State<ForumThreadPage> {
                           width: 44,
                           height: 44,
                           decoration: BoxDecoration(
-                            color: const Color(0xFF00A74F).withOpacity(0.1),
+                            color: AppColors.primary600.withValues(alpha: 0.1),
                             shape: BoxShape.circle,
                           ),
                           child: const Icon(
                             Icons.person,
                             size: 20,
-                            color: Color(0xFF00A74F),
+                            color: AppColors.primary600,
                           ),
                         ),
                         title: Column(
@@ -395,7 +396,7 @@ class _ForumThreadPageState extends State<ForumThreadPage> {
                 const SizedBox(width: 12),
                 Container(
                   decoration: BoxDecoration(
-                    color: const Color(0xFF00A74F),
+                    color: AppColors.primary600,
                     shape: BoxShape.circle,
                   ),
                   child: IconButton(

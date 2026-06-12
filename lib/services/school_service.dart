@@ -31,7 +31,7 @@ class SchoolService {
     });
   }
 
-  // 🔎 Buscar os dados de uma escola uma única vez
+
   Future<DocumentSnapshot<Map<String, dynamic>>> getSchoolData(String schoolId) {
     return _db.collection('escolas').doc(schoolId).get();
   }

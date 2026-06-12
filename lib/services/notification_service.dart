@@ -5,7 +5,6 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:FamiliaEscolaApp/firebase_options.dart';
 import 'package:firebase_core/firebase_core.dart';
 
-// ✅ Páginas do app
 import 'package:FamiliaEscolaApp/pages/avisos_page.dart';
 import 'package:FamiliaEscolaApp/pages/mensagens_page.dart';
 import 'package:FamiliaEscolaApp/pages/alunos_page.dart';
@@ -37,14 +36,11 @@ class NotificationService {
     final messaging = FirebaseMessaging.instance;
     await messaging.requestPermission(alert: true, badge: true, sound: true);
 
-    // Token do dispositivo
-    final token = await messaging.getToken();
-    print("📱 Token FCM: $token");
+    await messaging.getToken();
 
     // Foreground
     _onMessageSubscription =
         FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
-          print("📨 Foreground: ${message.notification?.title}");
           await _showNotification(
             title: message.notification?.title ?? "Notificação",
             body: message.notification?.body ?? "",
@@ -55,14 +51,12 @@ class NotificationService {
     // Quando usuário abre a notificação
     _onMessageOpenedAppSubscription =
         FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-          print("🚀 Abriu pelo push: ${message.data}");
           _handleNotificationClick(message.data);
         });
 
     // Se app iniciou por push
     final initialMessage = await messaging.getInitialMessage();
     if (initialMessage != null) {
-      print("🚀 App iniciado via push: ${initialMessage.data}");
       _handleNotificationClick(initialMessage.data);
     }
   }
@@ -160,8 +154,6 @@ class NotificationService {
   /// Background handler
   static Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-    print("📩 Mensagem em background: ${message.data}");
-
     await _showNotification(
       title: message.notification?.title ?? 'Nova notificação',
       body: message.notification?.body ?? '',

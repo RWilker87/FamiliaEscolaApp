@@ -1,72 +1,60 @@
-import 'package:FamiliaEscolaApp/pages/alunos_page.dart';
-import 'package:FamiliaEscolaApp/pages/mensagens_page.dart';
-import 'package:FamiliaEscolaApp/pages/school_details_page.dart';
-import 'package:FamiliaEscolaApp/pages/turmas_page.dart';
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:intl/intl.dart';
 
-import '../widgets/main_scaffold.dart';
+import '../shared/providers/user_provider.dart';
+import '../shared/widgets/app_avatar.dart';
+import '../shared/widgets/app_empty_state.dart';
+import '../shared/widgets/app_section_header.dart';
+import '../shared/widgets/app_loading_skeleton.dart';
+import '../shared/widgets/aviso_card.dart';
+import '../shared/widgets/notification_badge.dart';
+import '../shared/widgets/staggered_fade_slide.dart';
+import 'alunos_page.dart';
+import 'mensagens_page.dart';
+import 'school_details_page.dart';
+import 'turmas_page.dart';
 import 'add_student_page.dart';
 import 'avisos_page.dart';
 import 'responsaveis_page.dart';
 
-class HomePage extends StatefulWidget {
+class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
 
   @override
-  State<HomePage> createState() => _HomePageState();
+  ConsumerState<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _HomePageState extends ConsumerState<HomePage> {
   String? _escolaId;
 
-  // Helper: inscreve no tópico da escola (chamado a cada build, mas só executa se mudar)
+  // Helper: inscreve no tópico da escola
   void _subscribeToSchoolTopic(String escolaId) {
     if (_escolaId != escolaId) {
       _escolaId = escolaId;
       FirebaseMessaging.instance.subscribeToTopic("escola_$escolaId");
-      print("📱 Inscrito no tópico: escola_$escolaId");
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
+    final userAsync = ref.watch(userModelProvider);
 
-    if (user == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
-
-    final uid = user.uid;
-
-    return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
+    return userAsync.when(
+      data: (user) {
+        if (user == null) {
           return const Scaffold(
-            body: Center(
-              child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00A74F)),
-              ),
-            ),
+            body: Center(child: Text("Usuário não encontrado")),
           );
         }
 
-        if (!snapshot.hasData || !snapshot.data!.exists) {
-          FirebaseAuth.instance.signOut();
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
-        }
+        final uid = user.uid;
+        final nomeUsuario = user.nome;
+        final isGestor = user.isGestor;
+        final escolaId = user.escolaId;
 
-        final dados = snapshot.data!.data() as Map<String, dynamic>;
-        final nomeUsuario = dados['nome'] ?? 'Usuário';
-        final tipoPerfil = dados['role'] ?? 'responsavel';
-        final isGestor = tipoPerfil == 'gestao';
-        final escolaId = dados['escolaId'];
-
-        if (escolaId == null) {
+        if (escolaId == null || escolaId.isEmpty) {
           return const Scaffold(
             body: Center(
               child: Column(
@@ -91,75 +79,83 @@ class _HomePageState extends State<HomePage> {
           );
         }
 
-        // 🔔 Inscreve nos tópicos da escola (apenas 1 vez por usuário)
         _subscribeToSchoolTopic(escolaId);
 
-        return MainScaffold(
-          currentIndex: 2,
-          body: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Header de boas-vindas
-                Container(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 50,
-                        height: 50,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF00A74F).withOpacity(0.1),
-                          shape: BoxShape.circle,
+        return Scaffold(
+          backgroundColor: const Color(0xFFF8FAFC),
+          appBar: AppBar(
+            title: const Text(
+              "Família & Escola",
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 20,
+                letterSpacing: -0.5,
+              ),
+            ),
+            centerTitle: false,
+            elevation: 0,
+            backgroundColor: Colors.white,
+          ),
+          body: RefreshIndicator(
+            onRefresh: () async {
+              ref.invalidate(userModelProvider);
+              await Future.delayed(const Duration(milliseconds: 800));
+            },
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header de boas-vindas
+                  Container(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Row(
+                      children: [
+                        AppAvatar(
+                          name: nomeUsuario,
+                          radius: 25,
                         ),
-                        child: Icon(
-                          Icons.person,
-                          size: 26,
-                          color: const Color(0xFF00A74F),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              "Olá, $nomeUsuario!",
-                              style: const TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF2D3748),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "Olá, $nomeUsuario!",
+                                style: const TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF2D3748),
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              isGestor ? "Perfil: Gestão Escolar" : "Perfil: Responsável",
-                              style: const TextStyle(
-                                fontSize: 14,
-                                color: Color(0xFF718096),
+                              const SizedBox(height: 4),
+                              Text(
+                                isGestor ? "Perfil: Gestão Escolar" : "Perfil: Responsável",
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  color: Color(0xFF718096),
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
 
-                const SizedBox(height: 16),
+                  const SizedBox(height: 24),
 
-                // 🔔 Quadro de Avisos
-                Expanded(
-                  flex: 5,
-                  child: Container(
+                  // Quadro de Avisos
+                  Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.grey.withOpacity(0.1),
+                          color: Colors.grey.withValues(alpha: 0.05),
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
@@ -170,46 +166,25 @@ class _HomePageState extends State<HomePage> {
                           .collection('avisos')
                           .where('escolaId', isEqualTo: escolaId)
                           .orderBy('data', descending: true)
-                          .limit(4)
+                          .limit(3)
                           .snapshots(),
                       builder: (context, avisoSnapshot) {
                         if (avisoSnapshot.connectionState == ConnectionState.waiting) {
-                          return const Center(
-                            child: CircularProgressIndicator(
-                              valueColor: AlwaysStoppedAnimation<Color>(Color(
-                                  0xFF00A74F)),
-                            ),
-                          );
+                          return AppLoadingSkeleton.list(itemCount: 2, showAvatar: false);
                         }
 
                         if (!avisoSnapshot.hasData || avisoSnapshot.data!.docs.isEmpty) {
-                          return Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.announcement_outlined,
-                                  size: 48,
-                                  color: Colors.grey[300],
-                                ),
-                                const SizedBox(height: 16),
-                                const Text(
-                                  "Nenhum aviso disponível",
-                                  style: TextStyle(
-                                    color: Color(0xFFA0AEC0),
-                                    fontSize: 16,
-                                  ),
-                                ),
-                              ],
-                            ),
+                          return const AppEmptyState(
+                            icon: Icons.campaign_outlined,
+                            title: "Nenhum aviso disponível",
+                            description: "Fique atento para as próximas atualizações da escola.",
                           );
                         }
 
                         final avisos = avisoSnapshot.data!.docs;
 
-                        // 🔎 contar não lidos (só para responsável)
                         int naoLidos = 0;
-                        if (tipoPerfil == 'responsavel') {
+                        if (!isGestor) {
                           for (var aviso in avisos) {
                             final data = aviso.data() as Map<String, dynamic>;
                             final lidoPor = List<String>.from(data['lidoPor'] ?? []);
@@ -222,127 +197,55 @@ class _HomePageState extends State<HomePage> {
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text(
-                                  "📋 Quadro de Avisos",
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w700,
-                                    color: Color(0xFF2D3748),
-                                  ),
-                                ),
-                                if (tipoPerfil == 'responsavel' && naoLidos > 0)
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                    decoration: BoxDecoration(
-                                      color: Colors.red.withOpacity(0.1),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Text(
-                                      "$naoLidos não lidos",
-                                      style: const TextStyle(
-                                        color: Colors.red,
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ),
-                              ],
+                            AppSectionHeader(
+                              title: "Quadro de Avisos",
+                              icon: Icons.campaign_outlined,
+                              trailing: (!isGestor && naoLidos > 0)
+                                  ? NotificationBadge(count: naoLidos)
+                                  : null,
                             ),
                             const SizedBox(height: 16),
+                            ListView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: avisos.length,
+                              itemBuilder: (context, index) {
+                                final doc = avisos[index];
+                                final aviso = doc.data() as Map<String, dynamic>;
+                                final titulo = aviso['titulo'] ?? "Sem título";
+                                final mensagem = aviso['mensagem'] ?? "";
+                                final data = (aviso['data'] as Timestamp?)?.toDate();
+                                final lidoPor = List<String>.from(aviso['lidoPor'] ?? []);
+                                final jaLido = isGestor || lidoPor.contains(uid);
 
-                            Expanded(
-                              child: ListView.separated(
-                                itemCount: avisos.length,
-                                separatorBuilder: (context, index) => const Divider(height: 1),
-                                itemBuilder: (context, index) {
-                                  final aviso = avisos[index].data() as Map<String, dynamic>;
-                                  final titulo = aviso['titulo'] ?? "Sem título";
-                                  final mensagem = aviso['mensagem'] ?? "";
-                                  final data = (aviso['data'] as Timestamp?)?.toDate();
-
-                                  bool jaLido = true;
-                                  if (tipoPerfil == 'responsavel') {
-                                    final lidoPor = List<String>.from(aviso['lidoPor'] ?? []);
-                                    jaLido = lidoPor.contains(uid);
-                                  }
-
-                                  return Container(
-                                    decoration: BoxDecoration(
-                                      color: (tipoPerfil == 'responsavel' && !jaLido)
-                                          ? const Color(0xFFEBF4FF)
-                                          : Colors.transparent,
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: ListTile(
-                                      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                      leading: Container(
-                                        width: 40,
-                                        height: 40,
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFF00A74F).withOpacity(0.1),
-                                          shape: BoxShape.circle,
-                                        ),
-                                        child: Icon(
-                                          Icons.campaign,
-                                          size: 20,
-                                          color: const Color(0xFF00A74F),
-                                        ),
-                                      ),
-                                      title: Text(
-                                        titulo,
-                                        style: TextStyle(
-                                          fontWeight: (tipoPerfil == 'responsavel' && !jaLido)
-                                              ? FontWeight.w700
-                                              : FontWeight.w600,
-                                          color: const Color(0xFF2D3748),
-                                        ),
-                                      ),
-                                      subtitle: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            mensagem,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
-                                              color: Color(0xFF718096),
-                                            ),
+                                return StaggeredFadeSlide(
+                                  index: index,
+                                  child: AvisoCard(
+                                    title: titulo,
+                                    message: mensagem,
+                                    date: data,
+                                    jaLido: jaLido,
+                                    role: isGestor ? 'gestao' : 'responsavel',
+                                    readCount: lidoPor.length,
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => AvisoDetalhesPage(
+                                            avisoId: doc.id,
+                                            aviso: aviso,
+                                            role: isGestor ? 'gestao' : 'responsavel',
+                                            uid: uid,
+                                            jaLido: jaLido,
                                           ),
-                                          if (data != null)
-                                            Padding(
-                                              padding: const EdgeInsets.only(top: 4),
-                                              child: Text(
-                                                DateFormat('dd/MM/yyyy').format(data),
-                                                style: const TextStyle(
-                                                  fontSize: 12,
-                                                  color: Color(0xFFA0AEC0),
-                                                ),
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                      trailing: (tipoPerfil == 'responsavel' && !jaLido)
-                                          ? Container(
-                                        width: 8,
-                                        height: 8,
-                                        decoration: const BoxDecoration(
-                                          color: Colors.red,
-                                          shape: BoxShape.circle,
                                         ),
-                                      )
-                                          : null,
-                                    ),
-                                  );
-                                },
-                              ),
+                                      );
+                                    },
+                                  ),
+                                );
+                              },
                             ),
-
-                            const SizedBox(height: 16),
-
+                            const SizedBox(height: 8),
                             Align(
                               alignment: Alignment.centerRight,
                               child: TextButton(
@@ -352,9 +255,6 @@ class _HomePageState extends State<HomePage> {
                                     MaterialPageRoute(builder: (_) => const AvisosPage()),
                                   );
                                 },
-                                style: TextButton.styleFrom(
-                                  foregroundColor: const Color(0xFF00A74F),
-                                ),
                                 child: const Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
@@ -370,85 +270,101 @@ class _HomePageState extends State<HomePage> {
                       },
                     ),
                   ),
-                ),
 
-                const SizedBox(height: 24),
+                  const SizedBox(height: 28),
 
-                // 🔘 Botões de Atalho
-                const Text(
-                  "Atalhos Rápidos",
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF2D3748),
+                  const AppSectionHeader(
+                    title: "Atalhos Rápidos",
+                    icon: Icons.grid_view_outlined,
                   ),
-                ),
 
-                const SizedBox(height: 16),
+                  const SizedBox(height: 16),
 
-                Expanded(
-                  flex: 3,
-                  child: GridView.count(
+                  GridView.count(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
                     crossAxisCount: 2,
                     crossAxisSpacing: 16,
                     mainAxisSpacing: 16,
-                    childAspectRatio: 1.5,
+                    childAspectRatio: 1.4,
                     children: [
-                      _menuButton("Alunos", Icons.people_outline, const Color(
-                          0xFF00A74F), () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => const AlunosPage()),
-                        );
-                      }),
-                      _menuButton("Turmas", Icons.class_outlined, const Color(
-                          0xFF6B0000), () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => const TurmasPage()),
-                        );
-                      }),
-                      _menuButton("Mensagens", Icons.chat_outlined, const Color(0xFFED8936), () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => const MensagensPage()),
-                        );
-                      }),
-                      if (isGestor)
-                        _menuButton("Adicionar Aluno", Icons.person_add_outlined, const Color(0xFF4299E1), () {
+                      StaggeredFadeSlide(
+                        index: 0,
+                        child: _menuButton("Alunos", Icons.people_outline, Theme.of(context).colorScheme.primary, () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (_) => const AddStudentPage()),
+                            MaterialPageRoute(builder: (_) => const AlunosPage()),
                           );
                         }),
+                      ),
+                      StaggeredFadeSlide(
+                        index: 1,
+                        child: _menuButton("Turmas", Icons.class_outlined, const Color(0xFF6B0000), () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const TurmasPage()),
+                          );
+                        }),
+                      ),
+                      StaggeredFadeSlide(
+                        index: 2,
+                        child: _menuButton("Mensagens", Icons.chat_outlined, const Color(0xFFED8936), () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const MensagensPage()),
+                          );
+                        }),
+                      ),
                       if (isGestor)
-                        _menuButton("Responsáveis", Icons.supervised_user_circle_outlined, const Color(0xFF9F7AEA), () {
+                        StaggeredFadeSlide(
+                          index: 3,
+                          child: _menuButton("Adicionar Aluno", Icons.person_add_outlined, const Color(0xFF4299E1), () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const AddStudentPage()),
+                            );
+                          }),
+                        ),
+                      if (isGestor)
+                        StaggeredFadeSlide(
+                          index: 4,
+                          child: _menuButton("Responsáveis", Icons.supervised_user_circle_outlined, const Color(0xFF9F7AEA), () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => ResponsaveisPage(
+                                  escolaId: escolaId,
+                                  gestorUid: uid,
+                                ),
+                              ),
+                            );
+                          }),
+                        ),
+                      StaggeredFadeSlide(
+                        index: isGestor ? 5 : 3,
+                        child: _menuButton("Escola", Icons.school_outlined, const Color(0xFFF56565), () {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (_) => ResponsaveisPage(
-                                escolaId: escolaId,
-                                gestorUid: uid,
-                              ),
+                              builder: (_) => SchoolDetailsPage(schoolId: escolaId),
                             ),
                           );
                         }),
-                      _menuButton("Escola", Icons.school_outlined, const Color(0xFFF56565), () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => SchoolDetailsPage(schoolId: escolaId),
-                          ),
-                        );                        
-                      }),
+                      ),
                     ],
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         );
       },
+      loading: () => const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      ),
+      error: (err, stack) => Scaffold(
+        body: Center(child: Text("Erro ao carregar página inicial: $err")),
+      ),
     );
   }
 
@@ -457,6 +373,7 @@ class _HomePageState extends State<HomePage> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: Color(0xFFE2E8F0), width: 1),
       ),
       child: InkWell(
         onTap: onPressed,
@@ -465,13 +382,6 @@ class _HomePageState extends State<HomePage> {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.grey.withOpacity(0.1),
-                blurRadius: 6,
-                offset: const Offset(0, 3),
-              ),
-            ],
           ),
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -481,7 +391,7 @@ class _HomePageState extends State<HomePage> {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
+                  color: color.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(icon, size: 24, color: color),

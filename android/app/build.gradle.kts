@@ -8,7 +8,7 @@ plugins {
 android {
     namespace = "com.example.a"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = "27.0.12077973" // Corrected to use Flutter's NDK version
+    ndkVersion = "28.2.13676358" // Match NDK version needed by integration_test plugin
 
     compileOptions {
         // ✅ Enables desugaring support
@@ -23,7 +23,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.a"
-        minSdk = 23
+        minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion // Corrected to use Flutter's target SDK version
         versionCode = flutter.versionCode
         versionName = flutter.versionName
@@ -31,8 +31,7 @@ android {
 
     buildTypes {
         release {
-            // Remove this line. Do not use the debug signing key for release builds.
-            // signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 }

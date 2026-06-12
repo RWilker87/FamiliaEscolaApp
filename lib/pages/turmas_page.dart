@@ -1,11 +1,14 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'add_turma_page.dart';
 import 'turma_detalhes_page.dart';
-import '../widgets/main_scaffold.dart';
+import '../shared/providers/user_provider.dart';
+import '../shared/widgets/staggered_fade_slide.dart';
+import '../shared/widgets/animated_fab.dart';
+import '../data/models/user_model.dart';
 
-class TurmasPage extends StatelessWidget {
+class TurmasPage extends ConsumerWidget {
   const TurmasPage({super.key});
 
   Future<void> _editarTurma(
@@ -14,7 +17,7 @@ class TurmasPage extends StatelessWidget {
 
     await showDialog(
       context: context,
-      builder: (context) => Dialog(
+      builder: (ctx) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Padding(
           padding: const EdgeInsets.all(20),
@@ -34,17 +37,9 @@ class TurmasPage extends StatelessWidget {
                 controller: controller,
                 decoration: InputDecoration(
                   labelText: "Nome da turma",
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                  ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: Color(0xFF00A74F), width: 2),
+                    borderSide: BorderSide(color: Theme.of(context).colorScheme.primary, width: 2),
                   ),
                 ),
               ),
@@ -53,23 +48,13 @@ class TurmasPage extends StatelessWidget {
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: () => Navigator.pop(context),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        side: const BorderSide(color: Color(0xFFE2E8F0)),
-                      ),
-                      child: const Text(
-                        "Cancelar",
-                        style: TextStyle(color: Color(0xFF4A5568)),
-                      ),
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text("Cancelar"),
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: ElevatedButton(
+                    child: FilledButton(
                       onPressed: () async {
                         if (controller.text.trim().isNotEmpty) {
                           await FirebaseFirestore.instance
@@ -79,16 +64,8 @@ class TurmasPage extends StatelessWidget {
                               .doc(turmaId)
                               .update({"nome": controller.text.trim()});
                         }
-                        Navigator.pop(context);
+                        if (ctx.mounted) Navigator.pop(ctx);
                       },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF00A74F),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
                       child: const Text("Salvar"),
                     ),
                   ),
@@ -105,82 +82,22 @@ class TurmasPage extends StatelessWidget {
       BuildContext context, String escolaId, String turmaId) async {
     final confirmar = await showDialog<bool>(
       context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.warning_amber_rounded,
-                  size: 30,
-                  color: Colors.red,
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                "Excluir Turma",
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF2D3748),
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                "Tem certeza que deseja excluir esta turma?",
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Color(0xFF718096),
-                ),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.pop(context, false),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        side: const BorderSide(color: Color(0xFFE2E8F0)),
-                      ),
-                      child: const Text(
-                        "Cancelar",
-                        style: TextStyle(color: Color(0xFF4A5568)),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () => Navigator.pop(context, true),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      child: const Text("Excluir"),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+      builder: (ctx) => AlertDialog(
+        title: const Text("Excluir Turma"),
+        content: const Text("Tem certeza que deseja excluir esta turma?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text("Cancelar"),
           ),
-        ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: const Text("Excluir"),
+          ),
+        ],
       ),
     );
 
@@ -195,61 +112,23 @@ class TurmasPage extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final userModelAsync = ref.watch(userModelProvider);
 
-    if (uid == null) {
-      return const Scaffold(
-        body: Center(child: Text("Usuário não autenticado")),
-      );
-    }
-
-    return StreamBuilder<DocumentSnapshot>(
-      stream:
-      FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
-      builder: (context, userSnapshot) {
-        if (userSnapshot.connectionState == ConnectionState.waiting) {
+    return userModelAsync.when(
+      data: (user) {
+        if (user == null) {
           return const Scaffold(
-            body: Center(
-              child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00A74F)),
-              ),
-            ),
+            body: Center(child: Text("Usuário não autenticado")),
           );
         }
 
-        if (!userSnapshot.hasData || !userSnapshot.data!.exists) {
-          return const Scaffold(
-            body: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.person_off_outlined,
-                    size: 64,
-                    color: Color(0xFFA0AEC0),
-                  ),
-                  SizedBox(height: 16),
-                  Text(
-                    "Usuário não encontrado",
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Color(0xFF718096),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }
-
-        final userData = userSnapshot.data!.data() as Map<String, dynamic>;
-        final role = userData['role'] ?? 'responsavel';
-        final escolaId = userData['escolaId'];
+        final role = user.role == UserRole.gestor ? 'gestao' : 'responsavel';
+        final escolaId = user.escolaId;
 
         if (role != 'gestao') {
-          return MainScaffold(
-            currentIndex: 2,
+          return Scaffold(
+            appBar: AppBar(title: const Text("Acesso restrito")),
             body: Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -264,7 +143,7 @@ class TurmasPage extends StatelessWidget {
                     "Acesso restrito",
                     style: TextStyle(
                       fontSize: 18,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.bold,
                       color: Color(0xFF2D3748),
                     ),
                   ),
@@ -282,10 +161,10 @@ class TurmasPage extends StatelessWidget {
           );
         }
 
-        if (escolaId == null) {
-          return MainScaffold(
-            currentIndex: 2,
-            body: Center(
+        if (escolaId == null || escolaId.isEmpty) {
+          return Scaffold(
+            appBar: AppBar(title: const Text("Gestor não vinculado")),
+            body: const Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -294,17 +173,17 @@ class TurmasPage extends StatelessWidget {
                     size: 64,
                     color: Color(0xFFA0AEC0),
                   ),
-                  const SizedBox(height: 16),
-                  const Text(
+                  SizedBox(height: 16),
+                  Text(
                     "Gestor não vinculado",
                     style: TextStyle(
                       fontSize: 18,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.bold,
                       color: Color(0xFF2D3748),
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  const Text(
+                  SizedBox(height: 8),
+                  Text(
                     "Você não está vinculado a nenhuma escola",
                     style: TextStyle(
                       color: Color(0xFF718096),
@@ -316,8 +195,18 @@ class TurmasPage extends StatelessWidget {
           );
         }
 
-        return MainScaffold(
-          currentIndex: 2,
+        return Scaffold(
+          backgroundColor: const Color(0xFFF8FAFC),
+          appBar: AppBar(
+            title: const Text(
+              "Gerenciar Turmas",
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
+            ),
+            backgroundColor: Colors.white,
+            foregroundColor: const Color(0xFF2D3748),
+            elevation: 0,
+            centerTitle: false,
+          ),
           body: Column(
             children: [
               // Header
@@ -325,9 +214,7 @@ class TurmasPage extends StatelessWidget {
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  border: Border(
-                    bottom: BorderSide(color: Colors.grey.shade200),
-                  ),
+                  border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
                 ),
                 child: Row(
                   children: [
@@ -335,13 +222,13 @@ class TurmasPage extends StatelessWidget {
                       width: 48,
                       height: 48,
                       decoration: BoxDecoration(
-                        color: const Color(0xFF00A74F).withOpacity(0.1),
+                        color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
                         Icons.group,
                         size: 24,
-                        color: const Color(0xFF00A74F),
+                        color: Theme.of(context).colorScheme.primary,
                       ),
                     ),
                     const SizedBox(width: 16),
@@ -353,7 +240,7 @@ class TurmasPage extends StatelessWidget {
                             "Gerenciar Turmas",
                             style: TextStyle(
                               fontSize: 18,
-                              fontWeight: FontWeight.w700,
+                              fontWeight: FontWeight.bold,
                               color: Color(0xFF2D3748),
                             ),
                           ),
@@ -382,11 +269,7 @@ class TurmasPage extends StatelessWidget {
                       .snapshots(),
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(
-                        child: CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00A74F)),
-                        ),
-                      );
+                      return const Center(child: CircularProgressIndicator());
                     }
                     if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                       return Center(
@@ -421,118 +304,133 @@ class TurmasPage extends StatelessWidget {
 
                     final turmas = snapshot.data!.docs;
 
-                    return ListView.separated(
-                      padding: const EdgeInsets.all(16),
-                      separatorBuilder: (_, __) => const SizedBox(height: 12),
-                      itemCount: turmas.length,
-                      itemBuilder: (context, index) {
-                        final turmaDoc = turmas[index];
-                        final turma = turmaDoc.data() as Map<String, dynamic>;
-                        final turmaNome = turma['nome'] ?? 'Sem nome';
-
-                        return Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.grey.withOpacity(0.1),
-                                blurRadius: 6,
-                                offset: const Offset(0, 3),
-                              ),
-                            ],
-                          ),
-                          child: ListTile(
-                            contentPadding: const EdgeInsets.all(16),
-                            leading: Container(
-                              width: 50,
-                              height: 50,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF00A74F).withOpacity(0.1),
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(
-                                Icons.class_outlined,
-                                size: 24,
-                                color: const Color(0xFF00A74F),
-                              ),
-                            ),
-                            title: Text(
-                              turmaNome,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFF2D3748),
-                              ),
-                            ),
-                            trailing: PopupMenuButton<String>(
-                              icon: Icon(Icons.more_vert, color: Colors.grey.shade600),
-                              onSelected: (value) {
-                                if (value == 'editar') {
-                                  _editarTurma(
-                                      context, escolaId, turmaDoc.id, turmaNome);
-                                } else if (value == 'excluir') {
-                                  _excluirTurma(context, escolaId, turmaDoc.id);
-                                }
-                              },
-                              itemBuilder: (context) => [
-                                const PopupMenuItem(
-                                  value: 'editar',
-                                  child: Row(
-                                    children: [
-                                      Icon(Icons.edit, size: 20, color: Colors.blue),
-                                      SizedBox(width: 8),
-                                      Text("Editar"),
-                                    ],
-                                  ),
-                                ),
-                                const PopupMenuItem(
-                                  value: 'excluir',
-                                  child: Row(
-                                    children: [
-                                      Icon(Icons.delete, size: 20, color: Colors.red),
-                                      SizedBox(width: 8),
-                                      Text("Excluir"),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => TurmaDetalhesPage(
-                                    escolaId: escolaId,
-                                    turmaId: turmaDoc.id,
-                                    turmaNome: turmaNome,
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        );
+                    return RefreshIndicator(
+                      onRefresh: () async {
+                        await Future.delayed(const Duration(milliseconds: 800));
                       },
+                      child: ListView.separated(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.all(16),
+                        separatorBuilder: (_, __) => const SizedBox(height: 12),
+                        itemCount: turmas.length,
+                        itemBuilder: (context, index) {
+                          final turmaDoc = turmas[index];
+                          final turma = turmaDoc.data() as Map<String, dynamic>;
+                          final turmaNome = turma['nome'] ?? 'Sem nome';
+
+                          return StaggeredFadeSlide(
+                            index: index,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: const Color(0xFFE2E8F0)),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.grey.withValues(alpha: 0.03),
+                                    blurRadius: 6,
+                                    offset: const Offset(0, 3),
+                                  ),
+                                ],
+                              ),
+                              child: ListTile(
+                                contentPadding: const EdgeInsets.all(16),
+                                leading: Container(
+                                  width: 50,
+                                  height: 50,
+                                  decoration: BoxDecoration(
+                                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Icon(
+                                    Icons.class_outlined,
+                                    size: 24,
+                                    color: Theme.of(context).colorScheme.primary,
+                                  ),
+                                ),
+                                title: Text(
+                                  turmaNome,
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF2D3748),
+                                  ),
+                                ),
+                                trailing: PopupMenuButton<String>(
+                                  icon: const Icon(Icons.more_vert, color: Color(0xFF94A3B8)),
+                                  onSelected: (value) {
+                                    if (value == 'editar') {
+                                      _editarTurma(
+                                          context, escolaId, turmaDoc.id, turmaNome);
+                                    } else if (value == 'excluir') {
+                                      _excluirTurma(context, escolaId, turmaDoc.id);
+                                    }
+                                  },
+                                  itemBuilder: (context) => [
+                                    const PopupMenuItem(
+                                      value: 'editar',
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.edit_outlined, size: 20, color: Colors.blue),
+                                          SizedBox(width: 8),
+                                          Text("Editar"),
+                                        ],
+                                      ),
+                                    ),
+                                    const PopupMenuItem(
+                                      value: 'excluir',
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.delete_outline, size: 20, color: Colors.red),
+                                          SizedBox(width: 8),
+                                          Text("Excluir"),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => TurmaDetalhesPage(
+                                        escolaId: escolaId,
+                                        turmaId: turmaDoc.id,
+                                        turmaNome: turmaNome,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          );
+                        },
+                      ),
                     );
                   },
                 ),
               ),
             ],
           ),
-          floatingActionButton: FloatingActionButton(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const AddTurmaPage()),
-              );
-            },
-            backgroundColor: const Color(0xFF00A74F),
-            foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: const Icon(Icons.add, size: 28),
+          floatingActionButton: AnimatedFAB(
+            child: FloatingActionButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AddTurmaPage()),
+                );
+              },
+              child: const Icon(Icons.add, size: 24),
+            ),
           ),
         );
       },
+      loading: () => const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      ),
+      error: (err, stack) => Scaffold(
+        body: Center(child: Text("Erro ao carregar turmas: $err")),
+      ),
     );
   }
 }
