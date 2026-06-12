@@ -1,67 +1,85 @@
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'shared/providers/user_provider.dart';
 import 'pages/login_page.dart';
-import 'pages/home_page.dart';
+import 'shared/widgets/main_navigation.dart';
 import 'pages/add_school_page.dart';
 
-class AuthGate extends StatelessWidget {
+class AuthGate extends ConsumerWidget {
   const AuthGate({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
+  Widget build(BuildContext context, WidgetRef ref) {
+    final userModelAsync = ref.watch(userModelProvider);
 
-        if (!snapshot.hasData) {
+    return userModelAsync.when(
+      data: (user) {
+        if (user == null) {
+          // Se não há usuário autenticado ou o documento no Firestore não existe
+          final firebaseUser = FirebaseAuth.instance.currentUser;
+          if (firebaseUser != null) {
+            FirebaseAuth.instance.signOut();
+          }
           return const LoginPage();
         }
 
-        return StreamBuilder<DocumentSnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('users')
-              .doc(snapshot.data!.uid)
-              .snapshots(),
-          builder: (context, userSnapshot) {
-            if (userSnapshot.connectionState == ConnectionState.waiting) {
-              return const Scaffold(
-                body: Center(child: CircularProgressIndicator()),
-              );
-            }
+        final isGestor = user.isGestor;
+        final escolaId = user.escolaId;
 
-            if (!userSnapshot.hasData || !userSnapshot.data!.exists) {
-              FirebaseAuth.instance.signOut();
-              return const LoginPage();
-            }
+        if (isGestor && (escolaId == null || escolaId.isEmpty)) {
+          return const AddSchoolPage();
+        }
 
-            final userData = userSnapshot.data!.data() as Map<String, dynamic>;
-            final tipoPerfil = userData['role'];
-            final idEscola = userData['escolaId'];
+        if (escolaId != null && escolaId.isNotEmpty) {
+          return const MainNavigation();
+        }
 
-            if (tipoPerfil == 'gestao' && (idEscola == null || idEscola.toString().isEmpty)) {
-              return const AddSchoolPage();
-            }
-
-            if (idEscola != null && idEscola.toString().isNotEmpty) {
-              return const HomePage();
-            }
-
-            // Caso de um responsável que, por algum erro, não foi vinculado.
-            return const Scaffold(
-              body: Center(
-                child: Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: Text("Você ainda não está vinculado a nenhuma escola. Contate a administração."),
-                ),
+        // Caso de um responsável que, por algum erro, não foi vinculado.
+        return Scaffold(
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text(
+                    "Você ainda não está vinculado a nenhuma escola. Contate a administração.",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 16),
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton(
+                    onPressed: () => FirebaseAuth.instance.signOut(),
+                    child: const Text("Voltar para o Login"),
+                  ),
+                ],
               ),
-            );
-          },
+            ),
+          ),
+        );
+      },
+      loading: () => const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      ),
+      error: (error, stackTrace) {
+        return Scaffold(
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text("Erro de autenticação: $error", textAlign: TextAlign.center),
+                  const SizedBox(height: 24),
+                  ElevatedButton(
+                    onPressed: () => FirebaseAuth.instance.signOut(),
+                    child: const Text("Tentar Novamente"),
+                  ),
+                ],
+              ),
+            ),
+          ),
         );
       },
     );
